@@ -1,0 +1,23 @@
+import { defineConfig } from "eslint/config";
+import obsidianmd from "eslint-plugin-obsidianmd";
+
+export default defineConfig([
+	{ ignores: ["main.js", "node_modules/**", "tests/**", "scripts/**", "*.mjs"] },
+	...obsidianmd.configs.recommended,
+	{
+		languageOptions: {
+			parserOptions: {
+				projectService: {
+					allowDefaultProject: ["eslint.config.*"],
+				},
+			},
+		},
+		rules: {
+			// Product and format names keep their official casing in UI text.
+			"obsidianmd/ui/sentence-case": [
+				"warn",
+				{ brands: ["KDM", "Obsidian", "Markdown"], acronyms: ["URL", "HTTPS", "HTTP", "API", "JWT"], ignoreRegex: ["^https?://"] },
+			],
+		},
+	},
+]);

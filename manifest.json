@@ -1,0 +1,10 @@
+{
+	"id": "kdm-planner",
+	"name": "KDM Planner",
+	"version": "1.0.0",
+	"minAppVersion": "1.13.0",
+	"description": "Plan your week in notes and enter tasks, leave days and completions into the KDM work tracker, with a weekly calendar that mirrors KDM.",
+	"author": "Tunahan ALTINTOP",
+	"authorUrl": "https://github.com/tunahanaltintop",
+	"isDesktopOnly": false
+}

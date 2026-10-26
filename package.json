@@ -1,0 +1,40 @@
+{
+  "name": "kdm-planner",
+  "version": "1.0.0",
+  "description": "Plan your week in notes and enter tasks, leave days and completions into the KDM work tracker, with a weekly calendar that mirrors KDM.",
+  "main": "main.js",
+  "type": "module",
+  "scripts": {
+    "dev": "node --env-file-if-exists=.env esbuild.config.mjs",
+    "build": "tsc -noEmit -skipLibCheck && node --env-file-if-exists=.env esbuild.config.mjs production",
+    "lint": "eslint .",
+    "test": "node --test --experimental-strip-types tests/*.test.ts",
+    "version": "node version-bump.mjs && git add manifest.json versions.json"
+  },
+  "keywords": [
+    "obsidian",
+    "obsidian-plugin",
+    "kdm",
+    "planning",
+    "timesheet",
+    "calendar"
+  ],
+  "author": "Tunahan ALTINTOP",
+  "license": "MIT",
+  "homepage": "https://github.com/tunahanaltintop/kdm-planner#readme",
+  "bugs": {
+    "url": "https://github.com/tunahanaltintop/kdm-planner/issues"
+  },
+  "repository": {
+    "type": "git",
+    "url": "https://github.com/tunahanaltintop/kdm-planner.git"
+  },
+  "devDependencies": {
+    "@types/node": "^26.6.4",
+    "esbuild": "^0.28.2",
+    "eslint": "^9.39.5",
+    "eslint-plugin-obsidianmd": "^0.4.2",
+    "obsidian": "^1.13.1",
+    "typescript": "~5.9"
+  }
+}

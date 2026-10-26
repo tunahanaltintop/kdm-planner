@@ -1,0 +1,109 @@
+/* ---- weekly calendar view ---- */
+.kdm-calendar { display: flex; flex-direction: column; padding: var(--size-4-2); gap: var(--size-4-2); overflow: hidden; }
+.kdm-toolbar { display: flex; align-items: center; gap: var(--size-4-3); flex-wrap: wrap; }
+.kdm-toolbar-group { display: flex; gap: var(--size-4-1); }
+.kdm-title { flex: 1; text-align: center; }
+.kdm-empty { text-align: center; padding: var(--size-4-8); color: var(--text-muted); }
+.kdm-error { color: var(--text-error); padding: var(--size-4-2); }
+
+.kdm-grid { display: flex; flex-direction: column; flex: 1; min-height: 0; overflow: auto; border: 1px solid var(--background-modifier-border); border-radius: var(--radius-m); }
+.kdm-head, .kdm-body { display: grid; grid-template-columns: 52px repeat(var(--kdm-days), minmax(90px, 1fr)); }
+.kdm-head { position: sticky; top: 0; z-index: 3; background: var(--background-primary); border-bottom: 1px solid var(--background-modifier-border); }
+.kdm-day-head { display: flex; flex-direction: column; align-items: center; padding: var(--size-4-1) 0; border-left: 1px solid var(--background-modifier-border); }
+.kdm-day-name { font-size: var(--font-ui-smaller); color: var(--text-muted); text-transform: uppercase; }
+.kdm-day-number { font-size: var(--font-ui-large); font-weight: var(--font-semibold); }
+.kdm-day-head.is-today .kdm-day-number { background: var(--interactive-accent); color: var(--text-on-accent); border-radius: 50%; width: 1.8em; height: 1.8em; display: flex; align-items: center; justify-content: center; }
+.kdm-gutter { position: relative; }
+.kdm-hour-label { height: var(--kdm-hour); font-size: var(--font-ui-smaller); color: var(--text-faint); text-align: right; padding-right: var(--size-4-1); transform: translateY(-0.6em); }
+.kdm-column { position: relative; height: calc(var(--kdm-hour) * 10); border-left: 1px solid var(--background-modifier-border); cursor: cell;
+	background-image: repeating-linear-gradient(to bottom, var(--background-modifier-border) 0, var(--background-modifier-border) 1px, transparent 1px, transparent calc(var(--kdm-hour) / 2)); }
+.kdm-column.is-today { background-color: var(--background-secondary-alt); }
+.kdm-now { position: absolute; left: 0; right: 0; height: 2px; background: var(--text-error); z-index: 2; pointer-events: none; }
+
+.kdm-entry { position: absolute; box-sizing: border-box; overflow: hidden; border-radius: var(--radius-s); padding: 2px 4px; font-size: var(--font-ui-smaller); line-height: 1.25; cursor: pointer; user-select: none; touch-action: none; border: 1px solid rgba(0, 0, 0, 0.12); z-index: 1; }
+.kdm-entry.is-movable { cursor: grab; }
+.kdm-entry.is-locked { opacity: 0.6; }
+.kdm-entry.is-dragging { cursor: grabbing; z-index: 4; box-shadow: var(--shadow-l); opacity: 0.9; }
+.kdm-entry-title { font-weight: var(--font-semibold); white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
+.kdm-entry-time, .kdm-entry-desc { opacity: 0.85; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
+.kdm-resize { position: absolute; left: 0; right: 0; bottom: 0; height: 6px; cursor: ns-resize; }
+
+/* ---- task dialog ---- */
+.kdm-plan-modal .kdm-task-select { max-width: 320px; }
+.kdm-plan-modal .kdm-time { width: 7.5em; }
+.kdm-chips { display: flex; flex-wrap: wrap; gap: var(--size-4-1); align-items: center; margin-bottom: var(--size-4-2); }
+.kdm-chips button { padding: 0 var(--size-4-2); height: var(--input-height); }
+.kdm-duration { margin-left: auto; color: var(--text-muted); }
+.kdm-messages { margin: var(--size-4-2) 0; display: flex; flex-direction: column; gap: var(--size-4-1); }
+.kdm-message { font-size: var(--font-ui-small); color: var(--text-muted); }
+.kdm-message.is-error { color: var(--text-error); }
+.kdm-message.is-warning { color: var(--text-warning, var(--color-orange)); }
+
+/* ---- kdm-week note block ---- */
+.kdm-note-week { border: 1px solid var(--background-modifier-border); border-radius: var(--radius-m); padding: var(--size-4-2); }
+/* Obsidian puts its "edit this block" button in the top-right corner, so the bar keeps clear of it. */
+.kdm-note-bar { display: flex; align-items: center; flex-wrap: wrap; gap: var(--size-4-2); margin-bottom: var(--size-4-2); padding-right: 3em; }
+.kdm-note-grid { display: grid; grid-template-columns: repeat(auto-fit, minmax(210px, 1fr)); gap: var(--size-4-2); }
+.kdm-note-day { border: 1px solid var(--background-modifier-border); border-radius: var(--radius-s); padding: var(--size-4-2); display: flex; flex-direction: column; gap: var(--size-4-1); min-height: 8em; }
+.kdm-note-day.is-today { border-color: var(--interactive-accent); }
+.kdm-note-day-head { display: flex; align-items: baseline; gap: var(--size-4-2); }
+.kdm-note-total { margin-left: auto; font-size: var(--font-ui-smaller); color: var(--text-muted); }
+.kdm-note-lines { display: flex; flex-direction: column; gap: var(--size-4-1); flex: 1; }
+.kdm-note-line { display: flex; flex-direction: column; gap: 2px; padding: var(--size-4-1); border-radius: var(--radius-s); background: var(--background-secondary); }
+.kdm-note-line.is-sent { opacity: 0.7; }
+.kdm-note-time { color: var(--text-accent); margin-right: var(--size-4-1); font-variant-numeric: tabular-nums; }
+.kdm-note-actions { display: flex; gap: var(--size-4-1); align-items: center; }
+.kdm-note-send { flex: 1; }
+.kdm-note-icon { padding: 0 var(--size-4-2); }
+.kdm-note-sent { color: var(--text-success, var(--color-green)); font-size: var(--font-ui-smaller); flex: 1; }
+.kdm-note-add, .kdm-note-edit { width: 100%; }
+
+/* lunch break band and day halves */
+.kdm-lunch { position: absolute; left: 0; right: 0; z-index: 0; pointer-events: none; background: repeating-linear-gradient(135deg, var(--background-modifier-hover) 0, var(--background-modifier-hover) 6px, transparent 6px, transparent 12px); border-top: 1px dashed var(--background-modifier-border-hover); border-bottom: 1px dashed var(--background-modifier-border-hover); }
+.kdm-lunch span { font-size: var(--font-ui-smaller); color: var(--text-faint); padding-left: var(--size-4-1); }
+.kdm-note-period { display: flex; flex-direction: column; gap: var(--size-4-1); }
+.kdm-note-period-label { font-size: var(--font-ui-smaller); color: var(--text-muted); text-transform: uppercase; letter-spacing: 0.04em; }
+.kdm-note-lunch { text-align: center; font-size: var(--font-ui-smaller); color: var(--text-faint); border-top: 1px dashed var(--background-modifier-border); border-bottom: 1px dashed var(--background-modifier-border); padding: 2px 0; margin: var(--size-4-1) 0; }
+
+/* quick actions on calendar entries: always visible, bottom right */
+.kdm-entry.has-one-action { padding-right: 26px; }
+.kdm-entry.has-two-actions { padding-right: 48px; }
+.kdm-entry-actions { position: absolute; right: 3px; bottom: 7px; display: flex; gap: 3px; z-index: 5; }
+.kdm-action { width: 20px; height: 20px; min-width: 0; padding: 0; line-height: 1; font-size: 14px; font-weight: var(--font-bold); border: none; border-radius: 50%; color: #fff; display: flex; align-items: center; justify-content: center; box-shadow: 0 1px 3px rgba(0, 0, 0, 0.35); cursor: pointer; transition: transform 0.1s, filter 0.1s; }
+.kdm-action.is-complete { background: #2e9e5b; }
+.kdm-action.is-delete { background: #d64545; }
+.kdm-action:hover { transform: scale(1.15); filter: brightness(1.1); }
+.kdm-action:active { transform: scale(0.95); }
+
+/* KDM entries shown above the notes of a day half */
+.kdm-note-kdm { display: flex; flex-direction: column; gap: 2px; }
+.kdm-note-chip { display: flex; gap: var(--size-4-1); align-items: baseline; padding: 1px var(--size-4-1); border-radius: var(--radius-s); font-size: var(--font-ui-smaller); cursor: pointer; border: 1px solid rgba(0, 0, 0, 0.1); }
+.kdm-note-chip-time { font-variant-numeric: tabular-nums; white-space: nowrap; }
+.kdm-note-chip-title { overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+.kdm-note-status { font-size: var(--font-ui-smaller); color: var(--text-muted); }
+.kdm-note-remove-block { color: var(--text-error); }
+.kdm-note-actions .kdm-action { flex: none; }
+.kdm-note-chip-actions { margin-left: auto; display: flex; gap: 3px; align-items: center; }
+.kdm-note-chip-actions .kdm-action { width: 16px; height: 16px; font-size: 12px; }
+
+/* a button whose request to KDM is still running */
+button.is-busy, button:disabled.kdm-action { opacity: 0.45; cursor: progress; transform: none; filter: grayscale(0.4); }
+
+/* read-only view of a locked entry */
+.kdm-view-rows { display: flex; flex-direction: column; gap: var(--size-4-2); margin-bottom: var(--size-4-3); }
+.kdm-view-row { display: grid; grid-template-columns: 8em 1fr; gap: var(--size-4-2); align-items: start; }
+.kdm-view-label { color: var(--text-muted); font-size: var(--font-ui-small); }
+.kdm-view-value { user-select: text; word-break: break-word; }
+.kdm-view-status { justify-self: start; padding: 0 var(--size-4-2); border-radius: var(--radius-s); font-weight: var(--font-semibold); }
+.kdm-view-description { white-space: pre-wrap; }
+
+/* sent notes take the colour of their KDM status, like entries on the calendar */
+.kdm-note-line.has-status { opacity: 1; border: 1px solid rgba(0, 0, 0, 0.12); }
+.kdm-note-line.has-status .kdm-note-time, .kdm-note-line.has-status .kdm-note-sent { color: inherit; }
+.kdm-action.is-edit { background: #2f6fd1; }
+
+/* status colours, the ones KDM's calendar uses; one place so a theme or snippet can change them */
+.kdm-status-planned { background: #fff3cd; color: #856404; }
+.kdm-status-completed { background: #d4edda; color: #155724; }
+.kdm-status-not-completed { background: #f8d7da; color: #721c24; }
+.kdm-status-day-off { background: #696969; color: #fff; }

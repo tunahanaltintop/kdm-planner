@@ -1,0 +1,13 @@
+node_modules/
+main.js
+*.map
+data.json
+.DS_Store
+.env
+.claude/
+*.har
+docs/KDM_API.md
+docs/SUBMISSION.md
+.idea/
+.vscode/
+*.log
