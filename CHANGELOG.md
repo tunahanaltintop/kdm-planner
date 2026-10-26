@@ -1,5 +1,11 @@
 # Changelog
 
+## 1.1.0
+
+Maintenance release, no change in behaviour.
+
+- Version bump to check that a new release reaches the Obsidian community directory and the in-app plugin browser.
+
 ## 1.0.0
 
 First release.
