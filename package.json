@@ -1,6 +1,6 @@
 {
   "name": "kdm-planner",
-  "version": "1.0.0",
+  "version": "1.1.0",
   "description": "Plan your week in notes and enter tasks, leave days and completions into the KDM work tracker, with a weekly calendar that mirrors KDM.",
   "main": "main.js",
   "type": "module",
