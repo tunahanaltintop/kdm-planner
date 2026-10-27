@@ -15,7 +15,7 @@
 .kdm-day-head.is-today .kdm-day-number { background: var(--interactive-accent); color: var(--text-on-accent); border-radius: 50%; width: 1.8em; height: 1.8em; display: flex; align-items: center; justify-content: center; }
 .kdm-gutter { position: relative; }
 .kdm-hour-label { height: var(--kdm-hour); font-size: var(--font-ui-smaller); color: var(--text-faint); text-align: right; padding-right: var(--size-4-1); transform: translateY(-0.6em); }
-.kdm-column { position: relative; height: calc(var(--kdm-hour) * 10); border-left: 1px solid var(--background-modifier-border); cursor: cell;
+.kdm-column { position: relative; height: calc(var(--kdm-hour) * var(--kdm-hours, 10)); border-left: 1px solid var(--background-modifier-border); cursor: cell;
 	background-image: repeating-linear-gradient(to bottom, var(--background-modifier-border) 0, var(--background-modifier-border) 1px, transparent 1px, transparent calc(var(--kdm-hour) / 2)); }
 .kdm-column.is-today { background-color: var(--background-secondary-alt); }
 .kdm-now { position: absolute; left: 0; right: 0; height: 2px; background: var(--text-error); z-index: 2; pointer-events: none; }

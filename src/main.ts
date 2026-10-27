@@ -8,7 +8,7 @@ import { confirm, PasswordModal, pickWeek } from "./modals";
 import { registerWeekBlock } from "./note-block";
 import { PlanFormValue, PlanModal, PlanModalInit } from "./plan-modal";
 import { DEFAULT_SETTINGS, KdmPlannerSettings, KdmPlannerSettingTab } from "./settings";
-import { addDays, isoDate, lunchFromSettings, minEditableDate, startOfWeek } from "./week";
+import { addDays, isoDate, lunchFromSettings, minEditableDate, startOfWeek, workHoursFromSettings } from "./week";
 import { emptyWeekBlock } from "./week-note";
 
 const TOKEN_SECRET = "kdm-planner-token";
@@ -150,7 +150,7 @@ export default class KdmPlannerPlugin extends Plugin {
 		s.maxBlockHours = number(s.maxBlockHours, DEFAULT_SETTINGS.maxBlockHours, 1, 10);
 		s.defaultMinutes = number(s.defaultMinutes, DEFAULT_SETTINGS.defaultMinutes, 15, 240);
 		s.showWeekend = s.showWeekend !== false;
-		for (const key of ["baseUrl", "email", "lunchStart", "lunchEnd"] as const) if (typeof s[key] !== "string") s[key] = DEFAULT_SETTINGS[key];
+		for (const key of ["baseUrl", "email", "workStart", "workEnd", "lunchStart", "lunchEnd"] as const) if (typeof s[key] !== "string") s[key] = DEFAULT_SETTINGS[key];
 	}
 
 	async saveSettings(): Promise<void> {
@@ -325,7 +325,13 @@ export default class KdmPlannerPlugin extends Plugin {
 			breakMinutes: this.settings.breakMinutes,
 			defaultMinutes: this.settings.defaultMinutes,
 			lunch: this.lunch(),
+			work: this.work(),
 		};
+	}
+
+	/** The configured working hours, as minutes after midnight. */
+	work() {
+		return workHoursFromSettings(this.settings.workStart, this.settings.workEnd);
 	}
 
 	/** The configured lunch break, as minutes after midnight. */

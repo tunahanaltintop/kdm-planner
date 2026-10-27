@@ -5,9 +5,7 @@
 import { PlanStatus } from "./kdm-protocol.ts";
 import type { PlanEntry, PlanStatusId } from "./kdm-protocol.ts";
 
-/** The scheduler shows 08:00-18:00 in 30 minute cells. */
-export const DAY_START_HOUR = 8;
-export const DAY_END_HOUR = 18;
+/** The scheduler works in 30 minute cells. */
 export const SLOT_MINUTES = 30;
 
 /** Company id whose users may edit the last 7 days instead of only the current week. */
@@ -27,6 +25,21 @@ export interface LunchBreak {
 export const DEFAULT_LUNCH_START = "12:30";
 export const DEFAULT_LUNCH_END = "13:30";
 
+/** Working hours as minutes after midnight. They guide the calendar and suggestions; entries may lie outside them. */
+export interface WorkHours {
+	start: number;
+	end: number;
+}
+
+export const DEFAULT_WORK_START = "08:30";
+export const DEFAULT_WORK_END = "17:30";
+
+/** Hours of the day the calendar grid shows, `end` exclusive. */
+export interface GridRange {
+	startHour: number;
+	endHour: number;
+}
+
 /** `12:30` -> 750; null when malformed. */
 export function clockToMinutes(value: string): number | null {
 	const match = /^(\d{1,2}):(\d{2})$/.exec(value.trim());
@@ -44,6 +57,35 @@ export function lunchFromSettings(start: string, end: string): LunchBreak {
 	return { start: from, end: to };
 }
 
+/** Working hours from the two setting strings; falls back to 08:30-17:30 when they are malformed or reversed. */
+export function workHoursFromSettings(start: string, end: string): WorkHours {
+	const from = clockToMinutes(start);
+	const to = clockToMinutes(end);
+	if (from === null || to === null || to <= from) return { start: clockToMinutes(DEFAULT_WORK_START) ?? 510, end: clockToMinutes(DEFAULT_WORK_END) ?? 1050 };
+	return { start: from, end: to };
+}
+
+/**
+ * Hours the grid shows: the whole working hours, widened to whole hours and to any entry that lies outside them, so
+ * that nothing is cut off.
+ */
+export function gridRange(work: WorkHours, entries: PlanEntry[], days: Date[]): GridRange {
+	let from = work.start;
+	let to = work.end;
+	for (const day of days) {
+		const dayStart = startOfDay(day);
+		const dayEnd = addDays(dayStart, 1);
+		for (const entry of entries) {
+			const start = asDate(entry.startTime);
+			const end = asDate(entry.endTime);
+			if (!(start < dayEnd && dayStart < end)) continue;
+			from = Math.min(from, start < dayStart ? 0 : start.getHours() * 60 + start.getMinutes());
+			to = Math.max(to, end >= dayEnd ? 24 * 60 : end.getHours() * 60 + end.getMinutes());
+		}
+	}
+	return { startHour: Math.floor(from / 60), endHour: Math.min(24, Math.ceil(to / 60)) };
+}
+
 export type DayPeriod = "am" | "pm";
 
 export const PERIOD_LABEL: Record<DayPeriod, string> = { am: "Öğleden önce", pm: "Öğleden sonra" };
@@ -57,6 +99,9 @@ export const WEEKDAY_SHORT = ["Pzt", "Sal", "Çar", "Per", "Cum", "Cmt", "Paz"];
 export const WEEKDAY_LONG = ["Pazartesi", "Salı", "Çarşamba", "Perşembe", "Cuma", "Cumartesi", "Pazar"];
 
 const pad = (value: number) => String(value).padStart(2, "0");
+
+/** 750 -> `12:30` */
+export const minutesToClock = (minutes: number): string => `${pad(Math.floor(minutes / 60))}:${pad(minutes % 60)}`;
 
 export function startOfDay(date: Date): Date {
 	return new Date(date.getFullYear(), date.getMonth(), date.getDate());
@@ -182,9 +227,9 @@ export interface Segment {
 const asDate = (value: Date | string): Date => (value instanceof Date ? value : new Date(value));
 
 /** The part of an entry that falls on `day`, clipped to the visible hours. Null when it does not touch the day. */
-export function segmentForDay(entry: PlanEntry, day: Date): Segment | null {
-	const dayStart = new Date(day.getFullYear(), day.getMonth(), day.getDate(), DAY_START_HOUR);
-	const dayEnd = new Date(day.getFullYear(), day.getMonth(), day.getDate(), DAY_END_HOUR);
+export function segmentForDay(entry: PlanEntry, day: Date, range: GridRange = { startHour: 0, endHour: 24 }): Segment | null {
+	const dayStart = new Date(day.getFullYear(), day.getMonth(), day.getDate(), range.startHour);
+	const dayEnd = new Date(day.getFullYear(), day.getMonth(), day.getDate(), range.endHour);
 	const start = asDate(entry.startTime);
 	const end = asDate(entry.endTime);
 	const from = start > dayStart ? start : dayStart;
@@ -234,6 +279,8 @@ export interface SlotRules {
 	breakMinutes: number;
 	/** A task that runs into the lunch break gets a warning. */
 	lunch?: LunchBreak;
+	/** A task outside the working hours gets a warning; it is still allowed. */
+	work?: WorkHours;
 }
 
 export interface SlotCheck {
@@ -250,8 +297,8 @@ export function checkSlot(start: Date, end: Date, rules: SlotRules): SlotCheck {
 	if (isNaN(start.getTime()) || isNaN(end.getTime())) return { errors: ["Tarih veya saat geçersiz."], warnings };
 	if (end <= start) return { errors: ["Bitiş saati başlangıçtan sonra olmalı."], warnings };
 	if (!sameDay(start, end)) errors.push("Kayıt aynı gün içinde başlayıp bitmeli.");
-	if (start.getHours() < DAY_START_HOUR || (sameDay(start, end) && end.getHours() * 60 + end.getMinutes() > DAY_END_HOUR * 60)) {
-		errors.push(`Saatler ${pad(DAY_START_HOUR)}:00 - ${pad(DAY_END_HOUR)}:00 arasında olmalı.`);
+	if (rules.work && sameDay(start, end) && (start.getHours() * 60 + start.getMinutes() < rules.work.start || end.getHours() * 60 + end.getMinutes() > rules.work.end)) {
+		warnings.push(`Mesai saatlerinin (${minutesToClock(rules.work.start)} - ${minutesToClock(rules.work.end)}) dışında.`);
 	}
 	if (start < rules.minEditable) errors.push(`${isoDate(rules.minEditable)} öncesindeki günler kilitli.`);
 	const minutes = (end.getTime() - start.getTime()) / 60_000;
@@ -278,7 +325,7 @@ export function checkSlot(start: Date, end: Date, rules: SlotRules): SlotCheck {
 }
 
 /**
- * First free slot of a day for a task of the given length: after the last entry plus a break, never inside the lunch
+ * First free slot of a day (within the working hours) for a task of the given length: after the last entry plus a break, never inside the lunch
  * break. With `period` the slot must lie in that half of the day. Returns null when nothing fits.
  */
 export function suggestSlot(
@@ -286,12 +333,12 @@ export function suggestSlot(
 	entries: PlanEntry[],
 	durationMinutes: number,
 	breakMinutes: number,
-	options: { lunch?: LunchBreak; period?: DayPeriod } = {},
+	options: { lunch?: LunchBreak; period?: DayPeriod; work?: WorkHours } = {},
 ): { start: Date; end: Date } | null {
 	const at = (minutes: number) => new Date(day.getFullYear(), day.getMonth(), day.getDate(), 0, minutes);
-	const { lunch, period } = options;
-	let windowStart = at(DAY_START_HOUR * 60);
-	let windowEnd = at(DAY_END_HOUR * 60);
+	const { lunch, period, work = workHoursFromSettings(DEFAULT_WORK_START, DEFAULT_WORK_END) } = options;
+	let windowStart = at(work.start);
+	let windowEnd = at(work.end);
 	if (lunch && period === "am") windowEnd = at(lunch.start);
 	if (lunch && period === "pm") windowStart = at(lunch.end);
 	const busy = entries

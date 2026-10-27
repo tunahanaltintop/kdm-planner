@@ -7,9 +7,9 @@ import {
 	addMinutes,
 	checkSlot,
 	clock,
-	DAY_END_HOUR,
-	DAY_START_HOUR,
 	formatDuration,
+	GridRange,
+	gridRange,
 	isoDate,
 	isPlanned,
 	layoutSegments,
@@ -41,6 +41,8 @@ export class KdmCalendarView extends ItemView {
 	private unsubscribe: (() => void) | null = null;
 	private columns: HTMLElement[] = [];
 	private dayCount = 7;
+	/** Hours the grid shows; set on every render from the working hours and the week's entries. */
+	private range: GridRange = { startHour: 8, endHour: 18 };
 	/** Entries that are talking to KDM right now; their buttons stay disabled. */
 	private busy = new Set<string>();
 
@@ -165,6 +167,9 @@ export class KdmCalendarView extends ItemView {
 		grid.setCssProps({ "--kdm-days": String(this.dayCount), "--kdm-hour": `${HOUR_PX}px` });
 		const days = Array.from({ length: this.dayCount }, (_, i) => addDays(this.weekStart, i));
 		const today = new Date();
+		const work = this.plugin.work();
+		const range = (this.range = gridRange(work, this.entries, days));
+		grid.setCssProps({ "--kdm-days": String(this.dayCount), "--kdm-hour": `${HOUR_PX}px`, "--kdm-hours": String(range.endHour - range.startHour) });
 
 		const head = grid.createDiv({ cls: "kdm-head" });
 		head.createDiv({ cls: "kdm-gutter" });
@@ -177,7 +182,7 @@ export class KdmCalendarView extends ItemView {
 
 		const body = grid.createDiv({ cls: "kdm-body" });
 		const gutter = body.createDiv({ cls: "kdm-gutter" });
-		for (let hour = DAY_START_HOUR; hour < DAY_END_HOUR; hour++) gutter.createDiv({ cls: "kdm-hour-label", text: `${String(hour).padStart(2, "0")}:00` });
+		for (let hour = range.startHour; hour < range.endHour; hour++) gutter.createDiv({ cls: "kdm-hour-label", text: `${String(hour).padStart(2, "0")}:00` });
 
 		days.forEach((day, index) => {
 			const column = body.createDiv({ cls: "kdm-column" });
@@ -186,14 +191,14 @@ export class KdmCalendarView extends ItemView {
 			column.addEventListener("click", (event) => {
 				if (event.target !== column) return;
 				const minutes = Math.floor((event.offsetY / HOUR_PX) * 60 / SLOT_MINUTES) * SLOT_MINUTES;
-				void this.newTask(day, addMinutes(new Date(day.getFullYear(), day.getMonth(), day.getDate(), DAY_START_HOUR), minutes));
+				void this.newTask(day, addMinutes(new Date(day.getFullYear(), day.getMonth(), day.getDate(), range.startHour), minutes));
 			});
 			this.columns.push(column);
 
 			// The lunch break splits the day into morning and afternoon.
 			const lunch = this.plugin.lunch();
-			const first = DAY_START_HOUR * 60;
-			const last = DAY_END_HOUR * 60;
+			const first = range.startHour * 60;
+			const last = range.endHour * 60;
 			if (lunch.end > first && lunch.start < last) {
 				const band = column.createDiv({ cls: "kdm-lunch" });
 				band.setCssProps({
@@ -203,12 +208,12 @@ export class KdmCalendarView extends ItemView {
 				if (index === 0) band.createSpan({ text: "Öğle arası" });
 			}
 
-			const segments = this.entries.map((e) => segmentForDay(e, day)).filter((s): s is NonNullable<typeof s> => s !== null);
+			const segments = this.entries.map((e) => segmentForDay(e, day, range)).filter((s): s is NonNullable<typeof s> => s !== null);
 			for (const placed of layoutSegments(segments)) this.renderEntry(column, placed, index);
 
 			if (sameDay(day, today)) {
-				const minutes = (today.getHours() - DAY_START_HOUR) * 60 + today.getMinutes();
-				if (minutes >= 0 && minutes <= (DAY_END_HOUR - DAY_START_HOUR) * 60) {
+				const minutes = (today.getHours() - range.startHour) * 60 + today.getMinutes();
+				if (minutes >= 0 && minutes <= (range.endHour - range.startHour) * 60) {
 					column.createDiv({ cls: "kdm-now" }).setCssProps({ top: `${(minutes / 60) * HOUR_PX}px` });
 				}
 			}
@@ -224,7 +229,7 @@ export class KdmCalendarView extends ItemView {
 		const style = statusStyle(entry.statusId);
 		const jobName = (entry.jobDefinition as { name?: string } | null | undefined)?.name;
 		const title = jobName ?? (entry.statusId === "DayOff" ? "İzin günü" : "Görev");
-		const startMinutes = (placed.start.getHours() - DAY_START_HOUR) * 60 + placed.start.getMinutes();
+		const startMinutes = (placed.start.getHours() - this.range.startHour) * 60 + placed.start.getMinutes();
 		const length = (placed.end.getTime() - placed.start.getTime()) / 60_000;
 
 		const block = column.createDiv({ cls: "kdm-entry" });

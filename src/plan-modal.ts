@@ -13,6 +13,7 @@ import {
 	isFullDayLeave,
 	leaveHours,
 	LunchBreak,
+	WorkHours,
 	parseIsoDate,
 	SlotCheck,
 	STATUS_CHOICES,
@@ -45,7 +46,7 @@ export interface PlanModalInit {
 /** What the dialog needs from the plugin. */
 export interface PlanModalHost {
 	catalog: JobCatalogEntry[];
-	rules(): { minEditable: Date; maxBlockHours: number; breakMinutes: number; defaultMinutes: number; lunch: LunchBreak };
+	rules(): { minEditable: Date; maxBlockHours: number; breakMinutes: number; defaultMinutes: number; lunch: LunchBreak; work: WorkHours };
 	/** Entries of the week containing `date`, for conflict checks. */
 	loadEntries(date: Date): Promise<PlanEntry[]>;
 	submit(value: PlanFormValue, entry?: PlanEntry): Promise<void>;
@@ -287,7 +288,7 @@ export class PlanModal extends Modal {
 	/** Fills the time fields with the first free slot of the day. */
 	private suggest(): void {
 		const rules = this.host.rules();
-		const slot = suggestSlot(this.date, this.existing, rules.defaultMinutes, rules.breakMinutes, { lunch: rules.lunch });
+		const slot = suggestSlot(this.date, this.existing, rules.defaultMinutes, rules.breakMinutes, { lunch: rules.lunch, work: rules.work });
 		if (!slot) return;
 		this.startTime = clock(slot.start);
 		this.endTime = clock(slot.end);

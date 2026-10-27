@@ -173,7 +173,8 @@ class WeekBlock extends MarkdownRenderChild {
 		root.addClass("kdm-note-week");
 
 		const bar = root.createDiv({ cls: "kdm-note-bar" });
-		const end = addDays(this.week.weekStart, 6);
+		const visibleDays = this.plugin.settings.showWeekend ? 7 : 5;
+		const end = addDays(this.week.weekStart, visibleDays - 1);
 		bar.createEl("strong", { text: `${this.week.weekStart.getDate()}.${this.week.weekStart.getMonth() + 1} – ${end.getDate()}.${end.getMonth() + 1}.${end.getFullYear()}` });
 		this.button(bar, "refresh", { text: this.busy.has("refresh") ? "Yenileniyor..." : "Yenile", label: "KDM'deki güncel durumu getir. Aktarılmamış notlara dokunulmaz." }, () => void this.guard("refresh", () => this.refreshFromKdm()));
 		bar.createEl("button", { text: "Takvimi aç", cls: "kdm-note-open" }).addEventListener("click", () => void this.plugin.activateView());
@@ -182,6 +183,7 @@ class WeekBlock extends MarkdownRenderChild {
 		const grid = root.createDiv({ cls: "kdm-note-grid" });
 		const today = new Date();
 		this.week.days.forEach((notes, index) => {
+			if (index >= visibleDays) return;
 			const day = addDays(this.week.weekStart, index);
 			const card = grid.createDiv({ cls: "kdm-note-day" });
 			if (sameDay(day, today)) card.addClass("is-today");
@@ -524,8 +526,8 @@ class WeekBlock extends MarkdownRenderChild {
 		const slot =
 			stated?.start && stated.end
 				? { start: stated.start, end: stated.end }
-				: (suggestSlot(day, entries, rules.defaultMinutes, rules.breakMinutes, { lunch: rules.lunch, period: line.period }) ??
-					suggestSlot(day, entries, rules.defaultMinutes, rules.breakMinutes, { lunch: rules.lunch }));
+				: (suggestSlot(day, entries, rules.defaultMinutes, rules.breakMinutes, { lunch: rules.lunch, work: rules.work, period: line.period }) ??
+					suggestSlot(day, entries, rules.defaultMinutes, rules.breakMinutes, { lunch: rules.lunch, work: rules.work }));
 		await this.plugin.openPlanModal(
 			{
 				date: day,
