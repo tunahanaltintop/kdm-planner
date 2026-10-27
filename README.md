@@ -16,7 +16,7 @@ The plugin's interface is in **Turkish**, matching KDM.
 - **Send to KDM**: a button next to every note opens a quick dialog that is already filled in: the task is matched from
   your task list, the description is the note, and the time is the first free slot (or the time you wrote). Notes about
   leave are entered as a leave day.
-- **KDM calendar view**: the weekly calendar of KDM's planning page (08:00-18:00, 30 minute cells) inside Obsidian. Click a
+- **KDM calendar view**: the weekly calendar of KDM's planning page (your working hours, 08:30-17:30 by default, in 30 minute cells) inside Obsidian. Click a
   cell to add, click an entry to edit, drag to move, drag the bottom edge to resize, right-click for the menu.
 - **All actions of KDM's planning page**: add, edit, move, resize, mark as completed, delete, leave days (whole days or
   hours). Past weeks are locked exactly as in KDM and open in a read-only view.

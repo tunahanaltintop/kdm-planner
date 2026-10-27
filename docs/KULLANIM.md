@@ -131,7 +131,7 @@ Ekle'ye basınca kayıt KDM'ye yazılır. Sonra not şu şekilde güncellenir:
 **Açmak için:** sol şeritteki takvim simgesi ya da *KDM takvimini aç* komutu. KDM'nin planlama sayfasındaki haftalık takvimin
 karşılığıdır.
 
-- **Görünüm:** Pazartesi-Pazar (ayarlardan hafta sonu gizlenebilir), 08:00-18:00, 30 dakikalık hücreler, bugün
+- **Görünüm:** Pazartesi-Pazar (ayarlardan hafta sonu gizlenebilir), mesai saatleri (varsayılan 08:30-17:30; mesai dışı kayıt varsa ızgara genişler), 30 dakikalık hücreler, bugün
   vurgulu ve güncel saat çizgisi. **Öğle arası** çizgili bir bantla işaretlidir ve günü ikiye böler.
 - **Gezinme:** ‹ önceki hafta, **Bugün**, › sonraki hafta. **Yenile** haftayı KDM'den taze çeker.
 - **Yeni görev:** boş bir hücreye tıklayın (30 dakikalık kayıt önerilir) ya da **Yeni görev** düğmesine basın.
@@ -175,7 +175,7 @@ Durum olarak **İzin günü** seçilince görev alanı kalkar ve **İzin türü*
 - **Tüm gün (08:30 - 17:30):** *Bitiş tarihi* ile birden çok güne yayılabilir. Süre, çalışılan gün başına 8 saat sayılır
   (Pazartesi-Cuma 5 gün = 40 saat); hafta sonu günleri saate eklenmez.
 - **Saatlik:** başlangıç/bitiş saati girilir; süre saat olarak kaydedilir. Blok sınırı, öğle arası ve mola kuralları
-  izne uygulanmaz; gün saatleri (08:00-18:00) ve kilitli gün kuralı uygulanır.
+  izne uygulanmaz; kilitli gün kuralı uygulanır.
 
 Notlarda **"izin"** (ör. "izin", "yıllık izin", "izinli") ile başlayan satırlar aktarılırken otomatik *İzin günü* olur;
 notta saat aralığı da yazılıysa **saatlik izin** olarak açılır.
@@ -187,7 +187,6 @@ notta saat aralığı da yazılıysa **saatlik izin** olarak açılır.
 **KDM'nin kurallarından alınanlar (hata, kayıt engellenir):**
 
 - Başlangıç ve bitiş **aynı gün** olmalı (izin hariç) ve bitiş başlangıçtan sonra olmalı.
-- Saatler **08:00-18:00** içinde olmalı.
 - Kilitli (geçmiş) günlere yazılamaz.
 - İzin gününe denk gelen görev girilemez.
 - Taşıma/uzatma yalnızca *Planlandı* kayıtlarda yapılır.
@@ -251,7 +250,8 @@ Ayrıca sol şeritte **takvim simgesi**, notların başlık çubuğunda **KDM ha
 | Görevler arası mola (dk) | 15 | Eksikse uyarı |
 | Blok sınırı (saat) | 4 | Bu süre ve üstü bloklar girilmez |
 | Varsayılan görev süresi (dk) | 60 | Saat önerisi için |
-| Hafta sonunu göster | açık | Takvimde Cumartesi/Pazar |
+| Mesai başlangıcı / bitişi | 08:30 / 17:30 | Takvimin saat aralığı ve yeni görevin önerilen saati. Mesai dışına taşan kayıt girilebilir, yalnızca uyarı verir. Bitiş başlangıçtan sonra olmalı |
+| Hafta sonunu göster | açık | Takvimde ve haftalık plan bloğunda Cumartesi/Pazar |
 
 ## 10. Gizlilik ve güvenlik
 

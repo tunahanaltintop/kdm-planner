@@ -1,5 +1,10 @@
 # Changelog
 
+## 1.2.0
+
+- **Working hours.** New settings *Mesai başlangıcı* and *Mesai bitişi* (default 08:30-17:30). The calendar spans them, and new tasks are proposed inside them. Nothing is forced: a task that starts earlier or ends later is accepted and only shows a warning. The calendar widens when a week has entries outside the working hours.
+- **Show weekend off** now also hides Saturday and Sunday in the weekly plan block, not only in the calendar. Unsent notes on those days are kept and come back when the setting is turned on.
+
 ## 1.1.0
 
 Maintenance release, no change in behaviour.
