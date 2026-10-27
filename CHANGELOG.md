@@ -1,5 +1,9 @@
 # Changelog
 
+## 1.3.1
+
+- **KDM entries in the weekly plan block are shown in full.** Entries that are in KDM but have no note in the block (e.g. entered on KDM's web page) were small one-line chips that cut off the task name and hid the description. They are now cards like the sent notes: the description is the text, wrapped in full, and the task name is shown below it, with the same edit, complete and delete buttons.
+
 ## 1.3.0
 
 - **Remember password** (*Parolayı hatırla*, off by default). KDM sessions run out after a while and had to be logged into again by hand. With this option on, the password is kept in Obsidian's secret storage on this device, and the plugin signs in again by itself when the session has run out: on *Yenile* in the calendar or a plan block, when sending or changing an entry, and when the vault opens. The password is stored only after KDM accepted it, is used only for the KDM URL and email it was entered for, and is deleted when the option is turned off, on logout, or when KDM refuses it. *Yeniden giriş* in the settings always asks for the password.
