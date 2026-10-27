@@ -90,7 +90,8 @@ export function parseLoginResponse(body: unknown): LoginResult {
 	const token = pick<string>(json, "token", "Token");
 	if (!token) {
 		const error = pick<{ message?: string }>(json, "error", "Error");
-		throw new KdmError(error?.message || "Login failed.");
+		// An answer without a token means the email or password was refused, which 401 stands for.
+		throw new KdmError(error?.message || "Login failed.", 401);
 	}
 	return {
 		token,

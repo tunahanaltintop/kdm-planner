@@ -22,6 +22,11 @@ export interface KdmClientOptions {
 	getSession: () => Session | null;
 	/** Called after a refresh so the new tokens can be stored. */
 	onSession: (session: Session | null) => void;
+	/**
+	 * Signs in again without asking (with a remembered password) when there is no session or the refresh token is dead
+	 * too. Resolves to whether there is a session afterwards.
+	 */
+	relogin?: () => Promise<boolean>;
 }
 
 type Method = "GET" | "POST" | "PATCH" | "PUT" | "DELETE";
@@ -53,7 +58,7 @@ export class KdmClient {
 		return headers;
 	}
 
-	/** Exchanges email and password for a session. The password is never stored. */
+	/** Exchanges email and password for a session. The client never keeps the password. */
 	async login(email: string, password: string): Promise<LoginResult> {
 		const response = await fetchWithTimeout({
 			url: this.url("Authenticate"),
@@ -96,12 +101,21 @@ export class KdmClient {
 		return false;
 	}
 
+	private async relogin(): Promise<boolean> {
+		return (await this.options.relogin?.()) ?? false;
+	}
+
+	/** Renews an expired access token before it is used; when the session is gone, signs in again if it can. */
+	private async ensureSession(): Promise<boolean> {
+		const session = this.options.getSession();
+		if (session && isTokenExpired(session.token, 30)) await this.refresh();
+		return this.options.getSession() !== null || this.relogin();
+	}
+
 	async request<T>(method: Method, path: string, body?: unknown): Promise<T> {
-		let session = this.options.getSession();
-		if (!session) throw new KdmError("Not logged in to KDM.", 401);
-		if (isTokenExpired(session.token, 30) && (await this.refresh())) session = this.options.getSession();
-		let response = await this.send(method, path, session?.token ?? null, body);
-		if (response.status === 401 && (await this.refresh())) {
+		if (!(await this.ensureSession())) throw new KdmError("Not logged in to KDM.", 401);
+		let response = await this.send(method, path, this.options.getSession()?.token ?? null, body);
+		if (response.status === 401 && ((await this.refresh()) || (await this.relogin()))) {
 			response = await this.send(method, path, this.options.getSession()?.token ?? null, body);
 		}
 		if (response.status === 401) throw new KdmError("The KDM session has expired. Log in again.", 401);

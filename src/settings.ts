@@ -5,8 +5,10 @@ import { clockToMinutes, DEFAULT_LUNCH_END, DEFAULT_LUNCH_START, DEFAULT_WORK_EN
 
 export interface KdmPlannerSettings {
 	baseUrl: string;
-	/** Account email. The password is asked for at login and never stored. */
+	/** Account email. */
 	email: string;
+	/** Keep the password in the secret storage to sign in again by itself when the session runs out. Off by default. */
+	rememberPassword: boolean;
 	/** Gap that should separate two tasks of a day, in minutes. */
 	breakMinutes: number;
 	/** Blocks of this many hours or more are refused. */
@@ -26,6 +28,7 @@ export interface KdmPlannerSettings {
 export const DEFAULT_SETTINGS: KdmPlannerSettings = {
 	baseUrl: "",
 	email: "",
+	rememberPassword: false,
 	breakMinutes: 15,
 	maxBlockHours: 4,
 	defaultMinutes: 60,
@@ -120,13 +123,14 @@ export class KdmPlannerSettingTab extends PluginSettingTab {
 					},
 					{
 						name: "Oturum",
-						desc: this.plugin.sessionSummary() ?? "Giriş yapılmadı. Giriş sonrası erişim anahtarı Obsidian'ın gizli depolamasında tutulur; parola saklanmaz.",
+						desc: this.plugin.sessionSummary() ?? "Giriş yapılmadı. Giriş sonrası erişim anahtarı Obsidian'ın gizli depolamasında tutulur.",
 						render: (setting: Setting) => {
 							const loggedIn = this.plugin.sessionSummary() !== null;
 							setting
 								.addButton((button) =>
 									button.setButtonText(loggedIn ? "Yeniden giriş" : "Giriş yap").setCta().onClick(() => {
-										void this.plugin.login().then(() => this.update());
+										// "Yeniden giriş" always asks, so a changed password can be typed in.
+										void this.plugin.login(loggedIn).then(() => this.update());
 									}),
 								)
 								.addButton((button) =>
@@ -141,6 +145,22 @@ export class KdmPlannerSettingTab extends PluginSettingTab {
 									}),
 								);
 						},
+					},
+					{
+						name: "Parolayı hatırla",
+						desc:
+							"Parola bu cihazda Obsidian'ın gizli depolamasında tutulur, kasayla eşitlenmez. Oturum dolduğunda (ör. Yenile'ye basınca) ve kasa " +
+							"açıldığında otomatik yeniden giriş yapılır. Kapatınca ya da çıkış yapınca kayıtlı parola silinir." +
+							(this.plugin.hasRememberedPassword ? " Şu an bir parola kayıtlı." : settings.rememberPassword ? " Parola bir sonraki girişte kaydedilir." : ""),
+						render: (setting: Setting) =>
+							setting.addToggle((toggle) =>
+								toggle.setValue(settings.rememberPassword).onChange((value) => {
+									settings.rememberPassword = value;
+									if (!value) this.plugin.forgetPassword();
+									this.plugin.saveSoon();
+									this.update();
+								}),
+							),
 					},
 				],
 			},

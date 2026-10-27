@@ -82,7 +82,9 @@ export class KdmCalendarView extends ItemView {
 	private async reload(force = false): Promise<void> {
 		const seq = ++this.loadSeq;
 		this.dayCount = this.plugin.settings.showWeekend ? 7 : 5;
-		if (!this.plugin.loggedIn) {
+		// A session that ran out is renewed with the remembered password, if there is one, before giving up.
+		if (!this.plugin.loggedIn && !(await this.plugin.ensureSession())) {
+			if (seq !== this.loadSeq) return;
 			this.entries = [];
 			this.error = null;
 			this.render();

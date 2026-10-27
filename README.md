@@ -27,7 +27,9 @@ The plugin's interface is in **Turkish**, matching KDM.
   not sent are never touched by a refresh.
 - **Safe by design**: buttons that call KDM are disabled while the request runs, the view refreshes when it succeeds and
   the button comes back when it fails.
-- The access token is kept in Obsidian's **secret storage**, is sent only over **HTTPS** and only to the KDM URL it was issued for. Your password is never stored.
+- The access token is kept in Obsidian's **secret storage**, is sent only over **HTTPS** and only to the KDM URL it was issued for.
+- **Remember password** (optional, off by default): when the session runs out, the plugin signs in again by itself, on
+  *Yenile* and when the vault opens, instead of asking for the password.
 
 ## Requirements
 
@@ -41,6 +43,9 @@ The plugin's interface is in **Turkish**, matching KDM.
 2. Open **Settings → KDM Planner**, enter your KDM **email** (and the address if yours differs).
 3. Press **Giriş yap** (log in) and type your password. The plugin keeps the access token, renews it automatically, and
    downloads your task list once per login.
+4. Optionally turn on **Parolayı hatırla** (remember password) in the login dialog or the settings. KDM sessions run
+   out after a while; with a remembered password the plugin then signs in again by itself (when you press *Yenile* in
+   the calendar or a plan block, when it sends something, and when the vault opens) instead of asking.
 
 ## Using it
 
@@ -108,7 +113,9 @@ completed, grey leave. Every entry has a green ✓ (mark as completed) and a red
 - **Transport.** The KDM URL must be HTTPS (plain HTTP is accepted only for `localhost`). If you change the URL, the stored session is dropped, so tokens are never sent to another server. Logging out also asks KDM to revoke the refresh token. Requests time out after 30 seconds.
 - **What is stored.** The access and refresh tokens are in Obsidian's secret storage. `data.json` holds your settings,
   your email, your name and user number as returned by KDM, and a cached copy of your task list. The password is only
-  sent to KDM at login and is never stored.
+  sent to KDM at login. It is stored only if you turn on **Parolayı hatırla**, and then only in Obsidian's secret
+  storage on this device (not in `data.json`, not synced with the vault), bound to the KDM URL and email it was entered
+  for. Turning the option off or logging out deletes it, and a password KDM refuses is deleted at once.
 - **Your vault.** The plugin only reads and writes notes that contain a `kdm-week` block, and only that block.
 - **Payments.** None; the plugin is free.
 - **Unofficial API.** KDM has no public API documentation. The plugin uses the same endpoints as KDM's web page, so a

@@ -30,6 +30,9 @@ test("parseLoginResponse surfaces the server's failure message (HTTP 200 with is
 	);
 	assert.throws(() => parseLoginResponse("<html>"), /JSON/);
 	assert.throws(() => parseLoginResponse({}), /Login failed/);
+	// Refused credentials are told apart from a broken answer, so a remembered password can be dropped.
+	assert.throws(() => parseLoginResponse({}), (error: KdmError) => error.status === 401);
+	assert.throws(() => parseLoginResponse("<html>"), (error: KdmError) => error.status === 0);
 });
 
 test("parseRefreshResponse keeps the old refresh token when none is returned", () => {

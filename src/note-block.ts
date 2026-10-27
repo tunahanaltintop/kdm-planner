@@ -45,7 +45,7 @@ class WeekBlock extends MarkdownRenderChild {
 
 	/** KDM entries of the week, shown as chips under each day. Silent when logged out. */
 	private async loadEntries(force = false): Promise<void> {
-		if (!this.plugin.loggedIn) {
+		if (!this.plugin.loggedIn && !(await this.plugin.ensureSession())) {
 			this.entries = [];
 			this.render();
 			return;
