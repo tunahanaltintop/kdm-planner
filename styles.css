@@ -76,15 +76,12 @@
 .kdm-action:active { transform: scale(0.95); }
 
 /* KDM entries shown above the notes of a day half */
-.kdm-note-kdm { display: flex; flex-direction: column; gap: 2px; }
-.kdm-note-chip { display: flex; gap: var(--size-4-1); align-items: baseline; padding: 1px var(--size-4-1); border-radius: var(--radius-s); font-size: var(--font-ui-smaller); cursor: pointer; border: 1px solid rgba(0, 0, 0, 0.1); }
-.kdm-note-chip-time { font-variant-numeric: tabular-nums; white-space: nowrap; }
-.kdm-note-chip-title { overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+.kdm-note-kdm { display: flex; flex-direction: column; gap: var(--size-4-1); }
+.kdm-note-entry { cursor: pointer; }
+.kdm-note-origin { min-width: 0; overflow-wrap: anywhere; }
 .kdm-note-status { font-size: var(--font-ui-smaller); color: var(--text-muted); }
 .kdm-note-remove-block { color: var(--text-error); }
 .kdm-note-actions .kdm-action { flex: none; }
-.kdm-note-chip-actions { margin-left: auto; display: flex; gap: 3px; align-items: center; }
-.kdm-note-chip-actions .kdm-action { width: 16px; height: 16px; font-size: 12px; }
 
 /* a button whose request to KDM is still running */
 button.is-busy, button:disabled.kdm-action { opacity: 0.45; cursor: progress; transform: none; filter: grayscale(0.4); }

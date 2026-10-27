@@ -252,19 +252,24 @@ class WeekBlock extends MarkdownRenderChild {
 			const start = new Date(entry.startTime);
 			const end = new Date(entry.endTime);
 			const name = (entry.jobDefinition as { name?: string } | null | undefined)?.name ?? "İzin günü";
-			const chip = box.createDiv({ cls: "kdm-note-chip", attr: { title: [`KDM: ${name}`, style.label, entry.description ?? ""].filter(Boolean).join("\n") } });
+			const description = entry.description?.trim();
+			// Laid out like a sent note, in full: what was written is the text, the task it was entered under is below.
+			const chip = box.createDiv({ cls: "kdm-note-line has-status kdm-note-entry", attr: { title: [`KDM: ${name}`, style.label].join("\n") } });
 			chip.addClass(style.cls);
-			chip.createSpan({ cls: "kdm-note-chip-time", text: sameDay(start, end) ? `${clock(start)}–${clock(end)}` : "Tüm gün" });
-			chip.createSpan({ cls: "kdm-note-chip-title", text: name });
+			const text = chip.createDiv({ cls: "kdm-note-text" });
+			text.createSpan({ cls: "kdm-note-time", text: sameDay(start, end) ? `${clock(start)}–${clock(end)}` : "Tüm gün" });
+			text.createSpan({ text: description || name });
 			chip.addEventListener("click", () => void this.plugin.editEntry(entry));
 
+			const actions = chip.createDiv({ cls: "kdm-note-actions" });
+			actions.createSpan({ cls: "kdm-note-sent kdm-note-origin", text: description ? `KDM · ${name}` : "KDM" });
 			// Same quick actions as on the calendar; past (locked) entries have none.
 			if (!this.plugin.isLocked(entry) && entry.id !== undefined) {
 				const key = `chip:${entry.id}`;
-				const actions = chip.createDiv({ cls: "kdm-note-chip-actions" });
 				if (isPlanned(entry.statusId)) {
 					this.button(actions, key, { text: "✓", cls: "kdm-action is-complete", label: "Tamamlandı yap" }, () => void this.guard(key, () => this.complete(entry)));
 				}
+				this.button(actions, key, { text: "✎", cls: "kdm-action is-edit", label: "KDM kaydını düzenle" }, () => void this.plugin.editEntry(entry));
 				this.button(actions, key, { text: "×", cls: "kdm-action is-delete", label: "KDM'den sil" }, () => void this.deleteChip(key, entry));
 			}
 		}
