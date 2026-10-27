@@ -1,5 +1,9 @@
 # Changelog
 
+## 1.3.0
+
+- **Remember password** (*Parolayı hatırla*, off by default). KDM sessions run out after a while and had to be logged into again by hand. With this option on, the password is kept in Obsidian's secret storage on this device, and the plugin signs in again by itself when the session has run out: on *Yenile* in the calendar or a plan block, when sending or changing an entry, and when the vault opens. The password is stored only after KDM accepted it, is used only for the KDM URL and email it was entered for, and is deleted when the option is turned off, on logout, or when KDM refuses it. *Yeniden giriş* in the settings always asks for the password.
+
 ## 1.2.0
 
 - **Working hours.** New settings *Mesai başlangıcı* and *Mesai bitişi* (default 08:30-17:30). The calendar spans them, and new tasks are proposed inside them. Nothing is forced: a task that starts earlier or ends later is accepted and only shows a warning. The calendar widens when a week has entries outside the working hours.
