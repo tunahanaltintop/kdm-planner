@@ -6,34 +6,14 @@ import {
 	hoursBetween,
 	errorMessageOf,
 	KdmError,
+	mergeSetCookie,
 	normalizeBaseUrl,
-	parseLoginResponse,
 	parseRefreshResponse,
 	PlanStatus,
 	revivePlan,
 	toWireDate,
 	toWirePlan,
 } from "../src/kdm-protocol.ts";
-
-test("parseLoginResponse returns the session and user", () => {
-	const result = parseLoginResponse({ token: "t", refreshToken: "r", loginUser: { id: 3, name: "Ada", surname: "L" } });
-	assert.equal(result.token, "t");
-	assert.equal(result.refreshToken, "r");
-	assert.equal(result.user?.id, 3);
-	assert.equal(parseLoginResponse({ Token: "t2", RefreshToken: "r2" }).refreshToken, "r2");
-});
-
-test("parseLoginResponse surfaces the server's failure message (HTTP 200 with isSuccess false)", () => {
-	assert.throws(
-		() => parseLoginResponse({ isSuccess: false, error: { code: null, message: "Parola hatalı", time: null }, success: null }),
-		(error: unknown) => error instanceof KdmError && error.message === "Parola hatalı",
-	);
-	assert.throws(() => parseLoginResponse("<html>"), /JSON/);
-	assert.throws(() => parseLoginResponse({}), /Login failed/);
-	// Refused credentials are told apart from a broken answer, so a remembered password can be dropped.
-	assert.throws(() => parseLoginResponse({}), (error: KdmError) => error.status === 401);
-	assert.throws(() => parseLoginResponse("<html>"), (error: KdmError) => error.status === 0);
-});
 
 test("parseRefreshResponse keeps the old refresh token when none is returned", () => {
 	const previous = { token: "old", refreshToken: "keep" };
@@ -118,4 +98,18 @@ test("normalizeBaseUrl accepts HTTPS (and local HTTP) and rejects the rest", () 
 	assert.match(normalizeBaseUrl("kdm.example.com").error ?? "", /geçerli/);
 	assert.match(normalizeBaseUrl("ftp://kdm.example.com").error ?? "", /https/);
 	assert.match(normalizeBaseUrl("  ").error ?? "", /girin/);
+});
+
+test("mergeSetCookie replaces, adds and expires cookies", () => {
+	const now = Date.parse("2026-11-09T12:00:00Z");
+	assert.equal(mergeSetCookie("__Host-kdm-sid=a; other=1", "__Host-kdm-sid=b; Path=/; Secure; HttpOnly", now), "__Host-kdm-sid=b; other=1");
+	assert.equal(mergeSetCookie("", "x=1; Expires=Wed, 09 Dec 2026 10:00:00 GMT; Path=/, y=2; Path=/", now), "x=1; y=2");
+	assert.equal(mergeSetCookie("x=1; y=2", ["x=; Max-Age=0", "y=3"], now), "y=3");
+	assert.equal(mergeSetCookie("x=1", "x=gone; Expires=Mon, 09 Nov 2026 11:00:00 GMT", now), "");
+	assert.equal(mergeSetCookie("x=1", undefined, now), "x=1");
+	assert.equal(mergeSetCookie("a=b=c", "d=e=f", now), "a=b=c; d=e=f");
+});
+
+test("parseRefreshResponse keeps the session cookie", () => {
+	assert.equal(parseRefreshResponse({ token: "n" }, { token: "o", refreshToken: "r", cookie: "s=1" })?.cookie, "s=1");
 });

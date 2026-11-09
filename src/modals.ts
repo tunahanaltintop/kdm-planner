@@ -1,62 +1,6 @@
 import { App, Modal, Setting } from "obsidian";
 import { addDays, isoDate, parseIsoDate, startOfWeek } from "./week";
 
-export interface PasswordAnswer {
-	password: string;
-	/** Keep the password in the secret storage, to sign in again by itself when the session runs out. */
-	remember: boolean;
-}
-
-/** Asks for the KDM password. The modal itself keeps nothing; the caller stores it only when `remember` is set. */
-export class PasswordModal extends Modal {
-	private password = "";
-	private done = false;
-
-	constructor(
-		app: App,
-		private readonly email: string,
-		private remember: boolean,
-		private readonly onSubmit: (answer: PasswordAnswer | null) => void,
-	) {
-		super(app);
-	}
-
-	onOpen(): void {
-		this.setTitle("KDM girişi");
-		new Setting(this.contentEl)
-			.setName("Parola")
-			.setDesc(`Hesap: ${this.email}. Parola yalnızca KDM'ye gönderilir.`)
-			.addText((text) => {
-				text.inputEl.type = "password";
-				text.inputEl.addEventListener("keydown", (event) => {
-					if (event.key === "Enter") this.submit();
-				});
-				text.onChange((value) => (this.password = value));
-				window.setTimeout(() => text.inputEl.focus(), 0);
-			});
-		new Setting(this.contentEl)
-			.setName("Parolayı hatırla")
-			.setDesc("Bu cihazda Obsidian'ın gizli depolamasında tutulur. Oturum dolunca ve kasa açılınca otomatik yeniden giriş yapılır.")
-			.addToggle((toggle) => toggle.setValue(this.remember).onChange((value) => (this.remember = value)));
-		new Setting(this.contentEl).addButton((button) => button.setButtonText("Giriş yap").setCta().onClick(() => this.submit()));
-	}
-
-	private submit(): void {
-		if (!this.password) return;
-		const password = this.password;
-		// The modal does not keep the password once it has been handed over.
-		this.password = "";
-		this.done = true;
-		this.close();
-		this.onSubmit({ password, remember: this.remember });
-	}
-
-	onClose(): void {
-		this.contentEl.empty();
-		if (!this.done) this.onSubmit(null);
-	}
-}
-
 /** Yes/no question. Resolves to whether the user confirmed. */
 export function confirm(app: App, title: string, message: string, action: string): Promise<boolean> {
 	return new Promise((resolve) => {

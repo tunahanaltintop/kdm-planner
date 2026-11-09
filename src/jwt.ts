@@ -1,10 +1,15 @@
+/** Decodes base64url (with or without padding) to a binary string, as `atob` does for base64. */
+export function base64UrlDecode(text: string): string {
+	const base64 = text.replace(/-/g, "+").replace(/_/g, "/");
+	return atob(base64 + "=".repeat((4 - (base64.length % 4)) % 4));
+}
+
 /** Reads the payload of a JWT without verifying it; the server is the only party that validates tokens. */
 export function readClaims(token: string): Record<string, unknown> | null {
 	const payload = token.split(".")[1];
 	if (!payload) return null;
 	try {
-		const base64 = payload.replace(/-/g, "+").replace(/_/g, "/");
-		const parsed: unknown = JSON.parse(atob(base64));
+		const parsed: unknown = JSON.parse(base64UrlDecode(payload));
 		return typeof parsed === "object" && parsed !== null ? (parsed as Record<string, unknown>) : null;
 	} catch {
 		return null;

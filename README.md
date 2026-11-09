@@ -28,24 +28,25 @@ The plugin's interface is in **Turkish**, matching KDM.
 - **Safe by design**: buttons that call KDM are disabled while the request runs, the view refreshes when it succeeds and
   the button comes back when it fails.
 - The access token is kept in Obsidian's **secret storage**, is sent only over **HTTPS** and only to the KDM URL it was issued for.
-- **Remember password** (optional, off by default): when the session runs out, the plugin signs in again by itself, on
-  *Yenile* and when the vault opens, instead of asking for the password.
+- **Login through KDM's own page**: KDM's login has a security check (Cloudflare Turnstile) that only its web page can
+  pass. On desktop the plugin opens that page inside Obsidian and takes the session from it; it never sees your password.
+  Requests are signed the way KDM's web page signs them.
 
 ## Requirements
 
-- Obsidian **1.13.0** or later (desktop and mobile).
+- Obsidian **1.13.0** or later, **desktop only**: logging in needs KDM's login page inside Obsidian, which the mobile
+  app cannot show.
 - A **KDM account** and the address of your KDM site (**KDM URL**, entered in the settings).
 - Internet access to that site.
 
 ## Setup
 
 1. Install and enable the plugin.
-2. Open **Settings → KDM Planner**, enter your KDM **email** (and the address if yours differs).
-3. Press **Giriş yap** (log in) and type your password. The plugin keeps the access token, renews it automatically, and
-   downloads your task list once per login.
-4. Optionally turn on **Parolayı hatırla** (remember password) in the login dialog or the settings. KDM sessions run
-   out after a while; with a remembered password the plugin then signs in again by itself (when you press *Yenile* in
-   the calendar or a plan block, when it sends something, and when the vault opens) instead of asking.
+2. Open **Settings → KDM Planner** and enter the **KDM URL**. The **email** is optional; it only fills in the email
+   field of the login page.
+3. Press **Giriş yap** (log in). KDM's login page opens in a new tab inside Obsidian: pass the security check and log in
+   there. The tab closes by itself once you are in. The plugin keeps the access token, renews it automatically, and downloads
+   your task list once per login.
 
 ## Using it
 
@@ -97,7 +98,7 @@ completed, grey leave. Every entry has a green ✓ (mark as completed) and a red
 | Setting | Default |
 | --- | --- |
 | KDM URL | empty (enter the address of your KDM site, for example `https://kdm.example.com`) |
-| Email | empty |
+| Email | empty (optional, fills in the login page) |
 | Lunch break start / end | 12:30 / 13:30 |
 | Break between tasks (minutes) | 15 |
 | Block limit (hours) | 4 (blocks this long or longer are refused) |
@@ -111,11 +112,13 @@ completed, grey leave. Every entry has a green ✓ (mark as completed) and a red
   `requestUrl`: login, token refresh, reading your plan entries and task list, and creating, changing and deleting your
   plan entries when you ask it to. No other servers are contacted. There is **no telemetry**, no ads and no analytics.
 - **Transport.** The KDM URL must be HTTPS (plain HTTP is accepted only for `localhost`). If you change the URL, the stored session is dropped, so tokens are never sent to another server. Logging out also asks KDM to revoke the refresh token. Requests time out after 30 seconds.
-- **What is stored.** The access and refresh tokens are in Obsidian's secret storage. `data.json` holds your settings,
-  your email, your name and user number as returned by KDM, and a cached copy of your task list. The password is only
-  sent to KDM at login. It is stored only if you turn on **Parolayı hatırla**, and then only in Obsidian's secret
-  storage on this device (not in `data.json`, not synced with the vault), bound to the KDM URL and email it was entered
-  for. Turning the option off or logging out deletes it, and a password KDM refuses is deleted at once.
+- **Login page.** On desktop, **Giriş yap** shows the page at the KDM URL in a tab inside Obsidian, in an in-memory
+  browser session that is discarded when the tab closes. That page loads what KDM's site loads, including Cloudflare's
+  security check. The password is typed into KDM's page and never reaches the plugin; the plugin only reads the session
+  tokens the page stores after login and KDM's session cookie, which the tokens are bound to.
+- **What is stored.** The access and refresh tokens and KDM's session cookie are in Obsidian's secret storage. `data.json` holds your settings,
+  your email, your name and user number as returned by KDM, and a cached copy of your task list. The password is never
+  stored. A password remembered by version 1.3 is deleted on the first start of 1.4.
 - **Your vault.** The plugin only reads and writes notes that contain a `kdm-week` block, and only that block.
 - **Payments.** None; the plugin is free.
 - **Unofficial API.** KDM has no public API documentation. The plugin uses the same endpoints as KDM's web page, so a

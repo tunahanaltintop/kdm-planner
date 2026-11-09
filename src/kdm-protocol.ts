@@ -30,10 +30,42 @@ export interface LoginUser {
 export interface Session {
 	token: string;
 	refreshToken: string;
+	/**
+	 * Cookies of the browser session the tokens were issued to, as a `Cookie` header (`name=value; ...`). KDM binds its
+	 * tokens to the HttpOnly session cookie (`__Host-kdm-sid`, the token's `bnd` claim is its hash): without it every
+	 * request, the token refresh included, is refused, so a session is never kept without it.
+	 */
+	cookie: string;
 }
 
-export interface LoginResult extends Session {
-	user: LoginUser | null;
+/**
+ * Applies the `Set-Cookie` header(s) of a response to a `Cookie` header: new values replace old ones, and cookies that
+ * are expired (`Max-Age=0` or a past `Expires`) are dropped. Several cookies in one header may be comma-joined.
+ */
+export function mergeSetCookie(cookie: string, setCookie: string | string[] | undefined, now = Date.now()): string {
+	const jar = new Map<string, string>();
+	for (const part of cookie.split(";")) {
+		const index = part.indexOf("=");
+		if (index > 0) jar.set(part.slice(0, index).trim(), part.slice(index + 1).trim());
+	}
+	const lines = (Array.isArray(setCookie) ? setCookie : setCookie ? [setCookie] : [])
+		// A comma starts a new cookie only when a `name=` follows; the comma inside an `Expires` date does not.
+		.flatMap((line) => line.split(/,\s*(?=[^;,=\s]+=)/));
+	for (const line of lines) {
+		const [pair = "", ...attributes] = line.split(";");
+		const index = pair.indexOf("=");
+		if (index <= 0) continue;
+		const name = pair.slice(0, index).trim();
+		let expired = false;
+		for (const attribute of attributes) {
+			const [key = "", value = ""] = attribute.split("=").map((x) => x.trim());
+			if (/^max-age$/i.test(key) && Number(value) <= 0) expired = true;
+			if (/^expires$/i.test(key) && Date.parse(value) <= now) expired = true;
+		}
+		if (expired) jar.delete(name);
+		else jar.set(name, pair.slice(index + 1).trim());
+	}
+	return [...jar].map(([name, value]) => `${name}=${value}`).join("; ");
 }
 
 /** A plan entry as the planning calendar reads and writes it. Dates are local times without a zone. */
@@ -78,26 +110,10 @@ export class KdmError extends Error {
 	}
 }
 
-function pick<T>(source: Record<string, unknown>, ...names: string[]): T | undefined {
+/** The first of `names` that `source` has a value for; KDM answers in camelCase or PascalCase. */
+export function pick<T>(source: Record<string, unknown>, ...names: string[]): T | undefined {
 	for (const name of names) if (source[name] !== undefined && source[name] !== null) return source[name] as T;
 	return undefined;
-}
-
-/** Login failures come back as HTTP 200 with `{ isSuccess: false, error: { message } }`. */
-export function parseLoginResponse(body: unknown): LoginResult {
-	if (typeof body !== "object" || body === null) throw new KdmError("KDM did not answer with JSON.");
-	const json = body as Record<string, unknown>;
-	const token = pick<string>(json, "token", "Token");
-	if (!token) {
-		const error = pick<{ message?: string }>(json, "error", "Error");
-		// An answer without a token means the email or password was refused, which 401 stands for.
-		throw new KdmError(error?.message || "Login failed.", 401);
-	}
-	return {
-		token,
-		refreshToken: pick<string>(json, "refreshToken", "RefreshToken") ?? "",
-		user: pick<LoginUser>(json, "loginUser", "LoginUser") ?? null,
-	};
 }
 
 /**
@@ -153,7 +169,7 @@ export function parseRefreshResponse(body: unknown, previous: Session): Session 
 	const json = body as Record<string, unknown>;
 	const token = pick<string>(json, "token", "Token");
 	if (!token) return null;
-	return { token, refreshToken: pick<string>(json, "refreshToken", "RefreshToken") ?? previous.refreshToken };
+	return { ...previous, token, refreshToken: pick<string>(json, "refreshToken", "RefreshToken") ?? previous.refreshToken };
 }
 
 const pad = (value: number) => String(value).padStart(2, "0");
@@ -184,7 +200,7 @@ export function revivePlan<T extends { startTime?: unknown; endTime?: unknown }>
 const LOOPBACK_HOSTS = new Set(["localhost", "127.0.0.1", "[::1]"]);
 
 /**
- * Checks the KDM URL typed in the settings. The access token and the password travel to this address, so it must be
+ * Checks the KDM URL typed in the settings. The access tokens and the session cookie travel to this address, so it must be
  * HTTPS (plain HTTP only for the local machine) and must not carry credentials. Query and fragment are dropped.
  */
 export function normalizeBaseUrl(input: string): { url: string; error?: undefined } | { url?: undefined; error: string } {
@@ -198,7 +214,7 @@ export function normalizeBaseUrl(input: string): { url: string; error?: undefine
 	}
 	if (parsed.username || parsed.password) return { error: "KDM URL'sinde kullanıcı adı veya parola olamaz." };
 	const secure = parsed.protocol === "https:" || (parsed.protocol === "http:" && LOOPBACK_HOSTS.has(parsed.hostname));
-	if (!secure) return { error: "KDM URL'si https:// ile başlamalı: parola ve erişim anahtarı bu adrese gönderilir." };
+	if (!secure) return { error: "KDM URL'si https:// ile başlamalı: erişim anahtarları bu adrese gönderilir." };
 	const path = parsed.pathname.replace(/\/+$/, "");
 	return { url: `${parsed.origin}${path}` };
 }
@@ -207,8 +223,20 @@ export function normalizeBaseUrl(input: string): { url: string; error?: undefine
 export function errorMessageOf(body: unknown): string | null {
 	if (typeof body !== "object" || body === null) return null;
 	const json = body as Record<string, unknown>;
-	const error = (json.error ?? json.Error) as Record<string, unknown> | string | undefined;
+	const error = errorOf(json);
 	if (typeof error === "string") return error;
 	const message = error?.message ?? error?.Message ?? json.message ?? json.Message;
 	return typeof message === "string" && message.trim() ? message : null;
+}
+
+/** Reads the code of an error body such as `{ error: { code } }` or `{ Error: { Code } }`. */
+export function errorCodeOf(body: unknown): string | null {
+	if (typeof body !== "object" || body === null) return null;
+	const error = errorOf(body as Record<string, unknown>);
+	const code = typeof error === "object" ? (error.code ?? error.Code) : undefined;
+	return typeof code === "string" ? code : null;
+}
+
+function errorOf(json: Record<string, unknown>): Record<string, unknown> | string | undefined {
+	return (json.error ?? json.Error) as Record<string, unknown> | string | undefined;
 }

@@ -22,30 +22,27 @@ için `src/kdm-protocol.ts` ve `src/kdm-client.ts` dosyalarına bakın.
 ## 1. Kurulum ve giriş
 
 1. Eklentiyi kurup **Ayarlar → Topluluk eklentileri** bölümünden açın.
-2. **Ayarlar → KDM Planner** sayfasında **E-posta** alanına KDM hesabınızı yazın. **KDM URL** alanına KDM sitesinin adresini yazın
-   (ör. `https://kdm.example.com`); varsayılan adres yoktur.
-3. **Giriş yap** düğmesine basın ve parolanızı yazın. İsterseniz aynı pencerede **Parolayı hatırla**'yı açın (aşağıya bakın).
+2. **Ayarlar → KDM Planner** sayfasında **KDM URL** alanına KDM sitesinin adresini yazın (ör. `https://kdm.example.com`);
+   varsayılan adres yoktur. **E-posta** isteğe bağlıdır; yalnızca giriş sayfasındaki e-posta alanını doldurur.
+3. **Giriş yap** düğmesine basın. KDM'nin kendi giriş sayfası Obsidian'da yeni bir sekmede açılır. Güvenlik doğrulamasını
+   (Cloudflare) ve girişi orada yapın; giriş tamamlanınca sekme kendiliğinden kapanır. Parolanız eklentiye geçmez.
+
+KDM girişe, yalnızca web sayfasının geçebileceği bir güvenlik doğrulaması ekledi. Bu yüzden eklenti parola sormaz ve
+saklamaz. Giriş sayfası her seferinde bellekte tutulan boş bir tarayıcı oturumunda açılır ve sekme kapanınca silinir.
+KDM anahtarları girişte bırakılan oturum çerezine (`__Host-kdm-sid`) bağlar; eklenti bu çerezi de alır ve anahtarlarla
+birlikte saklar.
+
+Eklenti yalnızca **masaüstü** Obsidian'da çalışır; KDM'nin giriş sayfası mobil uygulamada açılamıyor.
 
 Giriş sonrası:
 
-- Erişim anahtarı ve yenileme anahtarı Obsidian'ın **gizli depolamasında** saklanır. Parola, **Parolayı hatırla** açık
-  değilse hiçbir yerde saklanmaz.
+- Erişim anahtarı, yenileme anahtarı ve KDM oturum çerezi Obsidian'ın **gizli depolamasında** saklanır. Parola hiçbir yerde saklanmaz
+  (1.3'ün **Parolayı hatırla** ile kaydettiği parola ilk açılışta silinir).
 - KDM URL'si **HTTPS** olmalıdır (yalnızca `localhost` için düz HTTP kabul edilir). URL'yi değiştirirseniz kayıtlı oturum silinir ve yeniden giriş istenir; anahtarlar hiçbir zaman başka bir adrese gönderilmez. **Çıkış yap** yenileme anahtarını KDM'de de iptal ettirmeye çalışır.
 - KDM'ye giden her istek 30 saniye içinde yanıt almazsa zaman aşımına uğrar ve düğmeler yeniden etkinleşir.
 - Anahtar süresi dolmadan otomatik yenilenir. Yenileme de başarısız olursa (KDM oturumu belli bir süre sonra tamamen
-  düşer) giriş yeniden istenir; **Parolayı hatırla** açıksa bunun yerine otomatik yeniden giriş yapılır.
-
-**Parolayı hatırla** (isteğe bağlı, varsayılan kapalı): giriş penceresinden ya da ayarlardan açılır. Açıkken parola
-yalnızca KDM'nin kabul ettiği bir girişten sonra, bu cihazda Obsidian'ın **gizli depolamasına** yazılır (`data.json`'a
-yazılmaz, kasayla eşitlenmez). Oturum düştüğünde şu durumlarda parola sorulmadan yeniden giriş yapılır ve işlem kaldığı
-yerden sürer:
-
-- takvimde ya da haftalık plan bloğunda **Yenile**'ye basınca, kayıt gönderince/değiştirince,
-- kasa açıldığında (Obsidian kapalıyken düşen oturum hemen yenilenir).
-
-Kayıtlı parola yalnızca girildiği **KDM URL'si ve e-posta** için kullanılır; ikisinden biri değişirse kullanılmaz.
-Seçeneği kapatınca ya da **Çıkış** yapınca silinir. KDM parolayı reddederse (ör. parolanızı değiştirdiyseniz) kayıtlı
-parola hemen silinir ve giriş yeniden sorulur. Ayarlardaki **Yeniden giriş** her zaman parola sorar.
+  düşer) yeniden giriş yapmanız gerekir.
+- İstekler, KDM'nin web sayfasının yaptığı gibi imzalanır (`X-KDM-Sig`); bunun için ek bir şey yapmanız gerekmez.
 - **Görev listeniz** (planlayabileceğiniz görevler) girişte bir kez çekilir ve önbelleğe alınır. Listeyi sonradan
   yenilemek için *Görev listesini yenile* komutunu ya da ayarlardaki **Görevleri yenile** düğmesini kullanın.
 - *KDM bağlantısını sına* komutu bu haftanın kayıtlarını okuyarak bağlantının çalıştığını gösterir.
@@ -247,7 +244,7 @@ Silme gibi onay isteyen işlemlerde düğme, onaydan sonra, istek gerçekten gö
 | KDM'ye görev ekle | Bugün için görev ekleme penceresini açar |
 | Haftalık plan bloğu ekle | Seçeceğiniz hafta için plan bloğu ekler (düzenleyicide) |
 | Görev listesini yenile | Görev listesini KDM'den yeniden çeker |
-| KDM'ye giriş yap | Parola sorar ve giriş yapar |
+| KDM'ye giriş yap | KDM'nin giriş sayfasını yeni bir sekmede açar |
 | KDM'den çıkış yap | Anahtarları ve önbelleği siler |
 | KDM bağlantısını sına | Bu haftanın kayıtlarını okur |
 
@@ -258,9 +255,8 @@ Ayrıca sol şeritte **takvim simgesi**, notların başlık çubuğunda **KDM ha
 | Ayar | Varsayılan | Açıklama |
 | --- | --- | --- |
 | KDM URL | boş | KDM sitesinin adresi (ör. `https://kdm.example.com`). HTTPS kullanın |
-| E-posta | boş | Giriş hesabı |
+| E-posta | boş | İsteğe bağlı; giriş sayfasındaki e-posta alanını doldurur |
 | Oturum | — | Giriş yap / Yeniden giriş, Görevleri yenile, Çıkış |
-| Parolayı hatırla | kapalı | Parolayı bu cihazın gizli depolamasında tutar; oturum düşünce ve kasa açılınca otomatik yeniden giriş. Kapatınca parola silinir |
 | Öğle arası başlangıcı / bitişi | 12:30 / 13:30 | Günü öğleden önce/sonra diye böler; takvimde bant, planlayıcıda ayraç, saat önerilerinde boşluk. Bitiş başlangıçtan sonra olmalı |
 | Görevler arası mola (dk) | 15 | Eksikse uyarı |
 | Blok sınırı (saat) | 4 | Bu süre ve üstü bloklar girilmez |
@@ -272,9 +268,10 @@ Ayrıca sol şeritte **takvim simgesi**, notların başlık çubuğunda **KDM ha
 
 - Eklenti yalnızca ayarlardaki **KDM URL'sine** bağlanır (giriş, anahtar yenileme, kayıtları ve görev listesini okuma,
   istediğinizde kayıt ekleme/değiştirme/silme). Başka sunucuya istek atılmaz; telemetri/reklam yoktur.
-- Parola yalnızca girişte KDM'ye gönderilir. **Parolayı hatırla** kapalıysa saklanmaz; açıksa yalnızca bu cihazda
-  Obsidian'ın gizli depolamasında, girildiği KDM URL'si ve e-postaya bağlı olarak tutulur ve başka adrese gönderilmez.
-- Erişim ve yenileme anahtarları **Obsidian'ın gizli depolamasındadır**, `data.json`'da değildir.
+- Parola eklentiye hiç geçmez: KDM'nin Obsidian içinde açılan kendi giriş sayfasına yazılır. Bu sayfa bellekte tutulan
+  ayrı bir tarayıcı oturumunda çalışır ve KDM sitesinin yüklediklerini (Cloudflare doğrulaması dahil) yükler; eklenti
+  yalnızca girişten sonra sayfanın sakladığı oturum anahtarlarını ve anahtarların bağlı olduğu KDM oturum çerezini okur.
+- Erişim ve yenileme anahtarları ile oturum çerezi **Obsidian'ın gizli depolamasındadır**, `data.json`'da değildir.
 - `data.json`'da ayarlarınız, e-postanız, KDM'nin döndürdüğü adınız/soyadınız/kullanıcı numaranız/şirket numaranız ve görev
   listenizin önbelleği bulunur. Giriş yanıtındaki diğer profil alanları (kimlik numarası gibi) **diske yazılmaz**.
 - Eklenti notlarınızdan yalnızca `kdm-week` bloğu içeren notlara ve yalnızca o bloğa yazar.
@@ -287,9 +284,9 @@ Ayrıca sol şeritte **takvim simgesi**, notların başlık çubuğunda **KDM ha
 | --- | --- |
 | Komutlar/simge görünmüyor | Eklentiyi Ayarlar → Topluluk eklentileri'nden kapatıp açın ya da Obsidian'ı yeniden başlatın |
 | Plan bloğu düz metin görünüyor | Notu **okuma moduna** alın (Cmd/Ctrl+E) |
-| "Giriş yapın" | Ayarlardan e-postayı girip **Giriş yap**'a basın |
-| "Oturum süresi doldu" | Yeniden giriş yapın (yenileme anahtarı da geçersiz). Her seferinde sorulmasın diyorsanız **Parolayı hatırla**'yı açın |
-| "KDM kayıtlı parolayı kabul etmedi" | Parolanız değişmiş olabilir; **Giriş yap** ile yeni parolayı girin |
+| "Giriş yapın" | Ayarlardan **Giriş yap**'a basın |
+| "Oturum süresi doldu" | Yeniden giriş yapın (yenileme anahtarı da geçersiz) |
+| Giriş sayfası açılmıyor / boş kalıyor | Bağlantınızı kontrol edip giriş sekmesini kapatın ve **Giriş yap**'a yeniden basın |
 | Aktarılmış not renksiz / "✓ KDM" ama kayıt yok | Planlayıcıda **Yenile**'ye basın |
 | "Bu blok burada düzenlenemiyor" | Blok gömülü/başka bir görünümde; notu açıp orada düzenleyin |
 | "Not değişmiş. Blok bulunamadı…" | Not siz düzenlerken değişti; bloğu yeniden açıp tekrar deneyin |

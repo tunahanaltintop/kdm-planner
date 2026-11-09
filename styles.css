@@ -104,3 +104,8 @@ button.is-busy, button:disabled.kdm-action { opacity: 0.45; cursor: progress; tr
 .kdm-status-completed { background: #d4edda; color: #155724; }
 .kdm-status-not-completed { background: #f8d7da; color: #721c24; }
 .kdm-status-day-off { background: #696969; color: #fff; }
+
+/* ---- KDM login page inside Obsidian (its own tab) ---- */
+.kdm-web-login { display: flex; flex-direction: column; }
+.kdm-web-login-frame { flex: 1; min-height: 480px; border: 1px solid var(--background-modifier-border); border-radius: var(--radius-m); overflow: hidden; }
+.kdm-web-login-frame webview { width: 100%; height: 100%; background-color: white; }

@@ -3,17 +3,22 @@ import { KdmCalendarView, VIEW_TYPE_KDM } from "./calendar-view";
 import { isTokenExpired, tokenExpiryMs, userIdFromToken } from "./jwt";
 import { EntryViewModal } from "./entry-modal";
 import { KdmClient } from "./kdm-client";
-import { buildNewPlan, JobCatalogEntry, KdmError, LoginUser, normalizeBaseUrl, PlanEntry, PlanStatus, Session } from "./kdm-protocol";
-import { confirm, PasswordAnswer, PasswordModal, pickWeek } from "./modals";
+import { buildNewPlan, JobCatalogEntry, LoginUser, normalizeBaseUrl, PlanEntry, PlanStatus, Session } from "./kdm-protocol";
+import { confirm, pickWeek } from "./modals";
 import { registerWeekBlock } from "./note-block";
+import { RequestSigner } from "./request-signer";
 import { PlanFormValue, PlanModal, PlanModalInit } from "./plan-modal";
 import { DEFAULT_SETTINGS, KdmPlannerSettings, KdmPlannerSettingTab } from "./settings";
 import { addDays, isoDate, lunchFromSettings, minEditableDate, startOfWeek, workHoursFromSettings } from "./week";
 import { emptyWeekBlock } from "./week-note";
+import { KdmLoginView, VIEW_TYPE_KDM_LOGIN, webLogin } from "./web-login";
 
 const TOKEN_SECRET = "kdm-planner-token";
 const REFRESH_SECRET = "kdm-planner-refresh-token";
-const PASSWORD_SECRET = "kdm-planner-password";
+/** KDM's session cookie, which the tokens are bound to. */
+const COOKIE_SECRET = "kdm-planner-session-cookie";
+/** Where 1.3 kept a remembered password. Login now goes through KDM's web page, so it is only ever cleared. */
+const LEGACY_PASSWORD_SECRET = "kdm-planner-password";
 
 interface CatalogCache {
 	fetchedAt: number;
@@ -27,8 +32,9 @@ interface PluginData extends Partial<KdmPlannerSettings> {
 	catalog?: CatalogCache | null;
 	/** Address the stored session was created for; the tokens are never sent anywhere else. */
 	sessionBase?: string | null;
-	/** Address and email the remembered password was entered for; it is never sent anywhere else. */
+	/** Written by 1.3 for "remember password"; dropped on load. */
 	passwordFor?: string | null;
+	rememberPassword?: unknown;
 }
 
 /** Callbacks for whoever opened the dialog on an existing entry (e.g. a note that stands for it). */
@@ -53,8 +59,8 @@ export default class KdmPlannerPlugin extends Plugin {
 	private catalog: CatalogCache | null = null;
 	private stored: Session | null = null;
 	private sessionBase: string | null = null;
-	private passwordFor: string | null = null;
-	private reloginInFlight: Promise<boolean> | null = null;
+	/** Signing key of the current access token, shared by every client. */
+	private readonly signer = new RequestSigner();
 	private weeks = new Map<string, Promise<PlanEntry[]>>();
 	private listeners = new Set<() => void>();
 	private loginInFlight = false;
@@ -66,6 +72,7 @@ export default class KdmPlannerPlugin extends Plugin {
 		this.loadSession();
 		this.addSettingTab(new KdmPlannerSettingTab(this.app, this));
 		this.registerView(VIEW_TYPE_KDM, (leaf: WorkspaceLeaf) => new KdmCalendarView(leaf, this));
+		this.registerView(VIEW_TYPE_KDM_LOGIN, (leaf: WorkspaceLeaf) => new KdmLoginView(leaf));
 		registerWeekBlock(this);
 
 		// A button in the header of every note that inserts a weekly plan block.
@@ -81,7 +88,6 @@ export default class KdmPlannerPlugin extends Plugin {
 			}
 		};
 		this.app.workspace.onLayoutReady(decorate);
-		this.app.workspace.onLayoutReady(() => void this.resumeSession());
 		this.registerEvent(this.app.workspace.on("active-leaf-change", decorate));
 		this.registerEvent(this.app.workspace.on("file-open", decorate));
 
@@ -138,9 +144,14 @@ export default class KdmPlannerPlugin extends Plugin {
 	// ---- settings and session ----
 
 	async loadSettings(): Promise<void> {
-		const { user, catalog, sessionBase, passwordFor, ...settings } = ((await this.loadData()) as PluginData | null) ?? {};
+		// `passwordFor` and `rememberPassword` (1.3) are taken out here so they are not written back.
+		const { user, catalog, sessionBase, passwordFor, rememberPassword, ...settings } = ((await this.loadData()) as PluginData | null) ?? {};
 		this.sessionBase = typeof sessionBase === "string" ? sessionBase : null;
-		this.passwordFor = typeof passwordFor === "string" ? passwordFor : null;
+		// A password remembered by 1.3 is of no use any more (KDM's login needs a check only its web page can pass).
+		if (passwordFor !== undefined || this.app.secretStorage.getSecret(LEGACY_PASSWORD_SECRET)) {
+			this.app.secretStorage.setSecret(LEGACY_PASSWORD_SECRET, "");
+			this.saveSoon();
+		}
 		this.settings = { ...DEFAULT_SETTINGS, ...settings };
 		this.sanitizeSettings();
 		// Older versions stored the whole profile; keep only the needed fields.
@@ -157,18 +168,27 @@ export default class KdmPlannerPlugin extends Plugin {
 		s.maxBlockHours = number(s.maxBlockHours, DEFAULT_SETTINGS.maxBlockHours, 1, 10);
 		s.defaultMinutes = number(s.defaultMinutes, DEFAULT_SETTINGS.defaultMinutes, 15, 240);
 		s.showWeekend = s.showWeekend !== false;
-		s.rememberPassword = s.rememberPassword === true;
 		for (const key of ["baseUrl", "email", "workStart", "workEnd", "lunchStart", "lunchEnd"] as const) if (typeof s[key] !== "string") s[key] = DEFAULT_SETTINGS[key];
 	}
 
 	async saveSettings(): Promise<void> {
-		await this.saveData({ ...this.settings, user: this.user, catalog: this.catalog, sessionBase: this.sessionBase, passwordFor: this.passwordFor });
+		await this.saveData({ ...this.settings, user: this.user, catalog: this.catalog, sessionBase: this.sessionBase });
 	}
 
 	private loadSession(): void {
 		const token = this.app.secretStorage.getSecret(TOKEN_SECRET);
 		const refreshToken = this.app.secretStorage.getSecret(REFRESH_SECRET) ?? "";
-		this.stored = token ? { token, refreshToken } : null;
+		const cookie = this.app.secretStorage.getSecret(COOKIE_SECRET) ?? "";
+		this.stored = token && cookie ? { token, refreshToken, cookie } : null;
+		// KDM refuses tokens without the session cookie they are bound to; a session stored before that (or by 1.3) is
+		// of no use and is dropped, so the plugin asks for a login instead of failing on every request.
+		if (token && !cookie) {
+			this.app.secretStorage.setSecret(TOKEN_SECRET, "");
+			this.app.secretStorage.setSecret(REFRESH_SECRET, "");
+			this.sessionBase = null;
+			this.saveSoon();
+			return;
+		}
 		// A session from an older version has no address yet: bind it to the configured one, once.
 		if (this.stored && this.sessionBase === null) {
 			this.sessionBase = this.currentBase();
@@ -194,10 +214,7 @@ export default class KdmPlannerPlugin extends Plugin {
 	dropForeignSession(): void {
 		if (this.stored && this.session === null) {
 			this.setSession(null, null);
-			this.forgetPassword();
-			this.user = null;
-			this.catalog = null;
-			this.weeks.clear();
+			this.resetAccount();
 			this.saveSoon();
 			this.notifyPlansChanged();
 			new Notice("KDM URL'si değişti: önceki oturum kapatıldı. Yeniden giriş yapın.");
@@ -206,11 +223,18 @@ export default class KdmPlannerPlugin extends Plugin {
 
 	/** Keeps the session in memory and in the secret storage, so it survives restarts without touching `data.json`. */
 	private setSession(session: Session | null, base: string | null = this.currentBase()): void {
+		const previous = this.stored;
+		const previousBase = this.sessionBase;
 		this.stored = session;
 		this.sessionBase = session ? base : null;
-		this.app.secretStorage.setSecret(TOKEN_SECRET, session?.token ?? "");
-		this.app.secretStorage.setSecret(REFRESH_SECRET, session?.refreshToken ?? "");
-		this.saveSoon();
+		// Only what changed is written: KDM renewing just the cookie must not rewrite the tokens and data.json.
+		const write = (name: string, value: string | undefined, old: string | undefined) => {
+			if (value !== old) this.app.secretStorage.setSecret(name, value ?? "");
+		};
+		write(TOKEN_SECRET, session?.token, previous?.token);
+		write(REFRESH_SECRET, session?.refreshToken, previous?.refreshToken);
+		write(COOKIE_SECRET, session?.cookie, previous?.cookie);
+		if (this.sessionBase !== previousBase) this.saveSoon();
 	}
 
 	get loggedIn(): boolean {
@@ -224,36 +248,10 @@ export default class KdmPlannerPlugin extends Plugin {
 			baseUrl: base.url,
 			getSession: () => this.session,
 			onSession: (session) => this.setSession(session, base.url),
-			relogin: () => this.relogin(),
+			signer: this.signer,
 		});
 	}
 
-	/** The address and account a password belongs to, or null when either is not set. */
-	private loginKey(): string | null {
-		const base = this.currentBase();
-		return base && this.settings.email ? `${base} ${this.settings.email.toLowerCase()}` : null;
-	}
-
-	/** The remembered password, but only for the address and email it was entered for. */
-	private rememberedPassword(): string | null {
-		if (!this.settings.rememberPassword || this.passwordFor === null || this.passwordFor !== this.loginKey()) return null;
-		return this.app.secretStorage.getSecret(PASSWORD_SECRET) || null;
-	}
-
-	get hasRememberedPassword(): boolean {
-		return this.rememberedPassword() !== null;
-	}
-
-	/** Keeps the password in the secret storage, bound to the current address and email; null removes it. */
-	private storePassword(password: string | null): void {
-		this.passwordFor = password ? this.loginKey() : null;
-		this.app.secretStorage.setSecret(PASSWORD_SECRET, password ?? "");
-		this.saveSoon();
-	}
-
-	forgetPassword(): void {
-		this.storePassword(null);
-	}
 
 	/** Human-readable state of the stored session, or null when there is none. */
 	sessionSummary(): string | null {
@@ -267,105 +265,48 @@ export default class KdmPlannerPlugin extends Plugin {
 	}
 
 	/**
-	 * Logs in and stores the resulting tokens. A remembered password is tried first, unless `ask` is set; otherwise the
-	 * password is asked for. Resolves to whether the login succeeded.
+	 * Logs in and stores the resulting tokens. KDM's login needs a Cloudflare Turnstile check, which only its web page can
+	 * pass: that page opens in a tab inside Obsidian and the tokens and session cookie are taken from it (the reason the
+	 * plugin is desktop only). Resolves to whether there is a session afterwards.
 	 */
-	async login(ask = false): Promise<boolean> {
+	async login(): Promise<boolean> {
 		if (this.loginInFlight) return false;
 		const base = normalizeBaseUrl(this.settings.baseUrl);
 		if (base.error !== undefined) {
 			new Notice(base.error);
 			return false;
 		}
-		if (!this.settings.email) {
-			new Notice("Önce ayarlardan KDM e-postanızı girin.");
-			return false;
-		}
 		this.loginInFlight = true;
 		try {
-			if (!ask && (await this.relogin())) {
-				this.notifyPlansChanged();
-				return true;
-			}
-			return await this.doLogin();
+			const session = await webLogin(this.app, base.url, this.settings.email);
+			if (!session) return false;
+			await this.startSession(session, base.url);
+			return true;
 		} finally {
 			this.loginInFlight = false;
 		}
 	}
 
-	private async doLogin(): Promise<boolean> {
-		const answer = await new Promise<PasswordAnswer | null>((resolve) =>
-			new PasswordModal(this.app, this.settings.email, this.settings.rememberPassword, resolve).open(),
-		);
-		if (!answer) return false;
-		try {
-			await this.signIn(answer.password);
-		} catch (error) {
-			new Notice(`KDM girişi başarısız: ${errorMessage(error)}`);
-			return false;
-		}
-		// Only a password KDM accepted is remembered.
-		this.settings.rememberPassword = answer.remember;
-		this.storePassword(answer.remember ? answer.password : null);
-		new Notice(`KDM'ye giriş yapıldı${this.user ? `: ${this.user.name} ${this.user.surname}` : ""}.`);
-		// The task list rarely changes, so it is fetched once per login and cached.
-		await this.refreshCatalog(true).catch((e: unknown) => new Notice(`Görev listesi alınamadı: ${errorMessage(e)}`));
-		this.notifyPlansChanged();
-		return true;
-	}
-
-	private async signIn(password: string): Promise<void> {
-		const result = await this.createClient().login(this.settings.email, password);
-		this.user = minimalUser(result.user);
-		this.weeks.clear();
+	/** Stores a new session, reads the profile and the task list that go with it, and tells the views. */
+	private async startSession(session: Session, base: string): Promise<void> {
+		this.setSession(session, base);
+		this.resetAccount();
+		// The task list rarely changes, so it is fetched once per login and cached. It needs only the user number, which
+		// the token carries, so it is fetched alongside the profile.
+		const catalog = this.refreshCatalog(true).catch((e: unknown) => new Notice(`Görev listesi alınamadı: ${errorMessage(e)}`));
+		// The name is only for display, so a profile that cannot be read is not an error.
+		this.user = minimalUser(await this.createClient().getLoginUser().catch(() => null));
 		await this.saveSettings();
+		new Notice(`KDM'ye giriş yapıldı${this.user ? `: ${this.user.name} ${this.user.surname}` : ""}.`);
+		await catalog;
+		this.notifyPlansChanged();
 	}
 
-	/**
-	 * Signs in again with the remembered password, without asking. Used when the session has run out (the refresh token
-	 * too) and when the vault opens. Calls at the same time share one login. Resolves to whether it succeeded.
-	 */
-	relogin(): Promise<boolean> {
-		this.reloginInFlight ??= this.doRelogin().finally(() => {
-			this.reloginInFlight = null;
-		});
-		return this.reloginInFlight;
-	}
-
-	private async doRelogin(): Promise<boolean> {
-		const password = this.rememberedPassword();
-		if (!password) return false;
-		try {
-			await this.signIn(password);
-		} catch (error) {
-			// A refused password is dropped so it is not tried again; other failures (offline, timeout) leave it for the
-			// next try, and the caller falls back to its logged-out state or to asking.
-			if (error instanceof KdmError && error.status === 401) {
-				this.forgetPassword();
-				new Notice("KDM kayıtlı parolayı kabul etmedi; parola silindi. Yeniden giriş yapın.", 8000);
-			}
-			return false;
-		}
-		new Notice("KDM oturumu otomatik yenilendi.");
-		return true;
-	}
-
-	/** Whether there is a session to use, signing in again with the remembered password when there is none. Never asks. */
-	async ensureSession(): Promise<boolean> {
-		return this.loggedIn || (await this.relogin());
-	}
-
-	/** When the vault opens, a session that ran out while Obsidian was closed is renewed before anything needs it. */
-	private async resumeSession(): Promise<void> {
-		if (!this.hasRememberedPassword) return;
-		const session = this.session;
-		if (session && !isTokenExpired(session.token, 30)) return;
-		try {
-			if (session && (await this.createClient().refresh())) return;
-		} catch {
-			// Offline or a server hiccup: the login below fails the same way and the views stay as they are.
-		}
-		if (await this.relogin()) this.notifyPlansChanged();
+	/** Forgets what belongs to the account: profile, task list and cached weeks. */
+	private resetAccount(): void {
+		this.user = null;
+		this.catalog = null;
+		this.weeks.clear();
 	}
 
 	logout(): void {
@@ -379,11 +320,7 @@ export default class KdmPlannerPlugin extends Plugin {
 			}
 		}
 		this.setSession(null);
-		// Logging out must stay logged out: the remembered password would sign in again at the next start.
-		this.forgetPassword();
-		this.user = null;
-		this.catalog = null;
-		this.weeks.clear();
+		this.resetAccount();
 		void this.saveSettings();
 		this.notifyPlansChanged();
 		new Notice("KDM oturumu kapatıldı.");

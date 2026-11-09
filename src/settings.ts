@@ -5,10 +5,8 @@ import { clockToMinutes, DEFAULT_LUNCH_END, DEFAULT_LUNCH_START, DEFAULT_WORK_EN
 
 export interface KdmPlannerSettings {
 	baseUrl: string;
-	/** Account email. */
+	/** Account email; only used to fill in the email field of KDM's login page. */
 	email: string;
-	/** Keep the password in the secret storage to sign in again by itself when the session runs out. Off by default. */
-	rememberPassword: boolean;
 	/** Gap that should separate two tasks of a day, in minutes. */
 	breakMinutes: number;
 	/** Blocks of this many hours or more are refused. */
@@ -28,7 +26,6 @@ export interface KdmPlannerSettings {
 export const DEFAULT_SETTINGS: KdmPlannerSettings = {
 	baseUrl: "",
 	email: "",
-	rememberPassword: false,
 	breakMinutes: 15,
 	maxBlockHours: 4,
 	defaultMinutes: 60,
@@ -112,7 +109,7 @@ export class KdmPlannerSettingTab extends PluginSettingTab {
 					},
 					{
 						name: "E-posta",
-						desc: "KDM'ye giriş yaptığınız hesap.",
+						desc: "İsteğe bağlı. KDM giriş sayfasındaki e-posta alanı bununla doldurulur.",
 						render: (setting: Setting) =>
 							setting.addText((text) =>
 								text.setValue(settings.email).onChange((value) => {
@@ -123,14 +120,18 @@ export class KdmPlannerSettingTab extends PluginSettingTab {
 					},
 					{
 						name: "Oturum",
-						desc: this.plugin.sessionSummary() ?? "Giriş yapılmadı. Giriş sonrası erişim anahtarı Obsidian'ın gizli depolamasında tutulur.",
+						desc:
+							this.plugin.sessionSummary() ??
+							"Giriş yapılmadı. Giriş yap, KDM'nin giriş sayfasını açar; güvenlik doğrulaması ve giriş orada yapılır. Erişim anahtarları Obsidian'ın gizli depolamasında tutulur, parola hiç saklanmaz.",
 						render: (setting: Setting) => {
 							const loggedIn = this.plugin.sessionSummary() !== null;
 							setting
 								.addButton((button) =>
 									button.setButtonText(loggedIn ? "Yeniden giriş" : "Giriş yap").setCta().onClick(() => {
-										// "Yeniden giriş" always asks, so a changed password can be typed in.
-										void this.plugin.login(loggedIn).then(() => this.update());
+										// Login happens in a tab of its own; by the time it ends the settings may be closed.
+										void this.plugin.login().then(() => {
+											if (this.containerEl.isConnected) this.update();
+										});
 									}),
 								)
 								.addButton((button) =>
@@ -145,22 +146,6 @@ export class KdmPlannerSettingTab extends PluginSettingTab {
 									}),
 								);
 						},
-					},
-					{
-						name: "Parolayı hatırla",
-						desc:
-							"Parola bu cihazda Obsidian'ın gizli depolamasında tutulur, kasayla eşitlenmez. Oturum dolduğunda (ör. Yenile'ye basınca) ve kasa " +
-							"açıldığında otomatik yeniden giriş yapılır. Kapatınca ya da çıkış yapınca kayıtlı parola silinir." +
-							(this.plugin.hasRememberedPassword ? " Şu an bir parola kayıtlı." : settings.rememberPassword ? " Parola bir sonraki girişte kaydedilir." : ""),
-						render: (setting: Setting) =>
-							setting.addToggle((toggle) =>
-								toggle.setValue(settings.rememberPassword).onChange((value) => {
-									settings.rememberPassword = value;
-									if (!value) this.plugin.forgetPassword();
-									this.plugin.saveSoon();
-									this.update();
-								}),
-							),
 					},
 				],
 			},
