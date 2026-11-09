@@ -133,7 +133,7 @@ export class KdmLoginView extends ItemView {
 		// Created detached, partition set before the page is loaded. A partition without "persist:" lives in memory only,
 		// and a new name per login starts from an empty session. The user agent is left as Electron's own: a made-up
 		// Chrome one did not match the rest of the browser and Cloudflare Turnstile refused it (error 600010).
-		const webview = createEl("webview");
+		const webview = createEl("webview", { cls: "kdm-web-login-webview" });
 		webview.setAttribute("partition", `kdm-planner-login-${Date.now()}`);
 		webview.setAttribute("src", `${base}${WEB_LOGIN_PATH}`);
 		webview.addEventListener("dom-ready", () => {
