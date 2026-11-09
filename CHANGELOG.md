@@ -1,5 +1,9 @@
 # Changelog
 
+## 1.4.1
+
+- Fixes the Obsidian plugin directory warning *Unexpected unknown type selector "webview"* in `styles.css`. The login page's webview is now styled by a class instead of by its tag name. Nothing changes in behaviour.
+
 ## 1.4.0
 
 - **Login works again.** KDM added a security check (Cloudflare Turnstile) to its login, which only its own web page can pass, so logging in with a password from the plugin failed with "Güvenlik doğrulaması tamamlanmadı". *Giriş yap* now opens KDM's login page in a tab inside Obsidian (desktop): pass the check and log in there, and the tab closes by itself. The page runs in an in-memory browser session that is discarded afterwards, and the password never reaches the plugin.
