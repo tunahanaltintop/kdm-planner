@@ -1,5 +1,14 @@
 # Changelog
 
+## 1.4.0
+
+- **Login works again.** KDM added a security check (Cloudflare Turnstile) to its login, which only its own web page can pass, so logging in with a password from the plugin failed with "Güvenlik doğrulaması tamamlanmadı". *Giriş yap* now opens KDM's login page in a tab inside Obsidian (desktop): pass the check and log in there, and the tab closes by itself. The page runs in an in-memory browser session that is discarded afterwards, and the password never reaches the plugin.
+- **Session cookie.** KDM now binds its tokens to an HttpOnly session cookie and refuses every request without it. The plugin takes that cookie at login, keeps it in the secret storage with the tokens and sends it with every request. A session stored by an earlier version is dropped, and you are asked to log in again.
+- **Desktop only.** Logging in needs KDM's login page inside Obsidian, which the mobile app cannot show, so the plugin is no longer offered on mobile (`isDesktopOnly`).
+- **Signed requests.** KDM now expects every authenticated request to carry a signature (`X-KDM-Sig`), as its web page sends it. The plugin signs its requests the same way.
+- **Remember password is removed.** It cannot work with the new security check. A password remembered by 1.3 is deleted from the secret storage on the first start.
+- The email setting is now optional; it only fills in the email field of the login page.
+
 ## 1.3.1
 
 - **KDM entries in the weekly plan block are shown in full.** Entries that are in KDM but have no note in the block (e.g. entered on KDM's web page) were small one-line chips that cut off the task name and hid the description. They are now cards like the sent notes: the description is the text, wrapped in full, and the task name is shown below it, with the same edit, complete and delete buttons.
