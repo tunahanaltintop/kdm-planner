@@ -1,5 +1,14 @@
 # Changelog
 
+## 1.5.0
+
+- **Remember password is back** (*Parolayı hatırla*, off by default), now for KDM's own login page. Turn it on in the settings or in the login tab. The email and password you type into KDM's login page are kept in Obsidian's secret storage on this device once KDM accepted them (not synced with the vault). They are bound to the KDM URL and email, and are put back only into the login page at that URL. Turning the option off, logging out or changing the KDM URL deletes them.
+- **Logs in again by itself.** KDM sessions run out after a while. With *Parolayı hatırla* on, the login tab opens by itself the next time KDM is needed. It fills in your remembered login and sends it once the security check has passed, then closes and takes you back to the tab you were in. What was waiting for KDM goes on with the new session. If the check wants a click, the tab says so.
+  - A remembered login is sent only once: if KDM refuses it (e.g. your password changed), log in in the tab yourself and the new password is remembered.
+  - If you close the tab of an automatic login, the plugin does not open one again by itself for 10 minutes. *Giriş yap* always works.
+- **Leave over several days shows its real hours.** A leave entered for several days showed as whole days in the calendar, and the calendar widened to 00:00-24:00. Each day now shows the leave's daily hours (08:30-17:30), and weekends inside the leave stay free. Nothing changes in what is sent to KDM.
+- The tooltip of a leave in the calendar shows the hours it counts for (e.g. 40 sa for a week), not the time between its start and end.
+
 ## 1.4.1
 
 - Fixes the Obsidian plugin directory warning *Unexpected unknown type selector "webview"* in `styles.css`. The login page's webview is now styled by a class instead of by its tag name. Nothing changes in behaviour.
