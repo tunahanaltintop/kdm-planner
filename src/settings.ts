@@ -5,8 +5,10 @@ import { clockToMinutes, DEFAULT_LUNCH_END, DEFAULT_LUNCH_START, DEFAULT_WORK_EN
 
 export interface KdmPlannerSettings {
 	baseUrl: string;
-	/** Account email; only used to fill in the email field of KDM's login page. */
+	/** Account email; fills in the email field of KDM's login page. */
 	email: string;
+	/** Keep the login typed into KDM's page in the secret storage, to log in again by itself. Off by default. */
+	rememberPassword: boolean;
 	/** Gap that should separate two tasks of a day, in minutes. */
 	breakMinutes: number;
 	/** Blocks of this many hours or more are refused. */
@@ -26,6 +28,7 @@ export interface KdmPlannerSettings {
 export const DEFAULT_SETTINGS: KdmPlannerSettings = {
 	baseUrl: "",
 	email: "",
+	rememberPassword: false,
 	breakMinutes: 15,
 	maxBlockHours: 4,
 	defaultMinutes: 60,
@@ -122,7 +125,7 @@ export class KdmPlannerSettingTab extends PluginSettingTab {
 						name: "Oturum",
 						desc:
 							this.plugin.sessionSummary() ??
-							"Giriş yapılmadı. Giriş yap, KDM'nin giriş sayfasını açar; güvenlik doğrulaması ve giriş orada yapılır. Erişim anahtarları Obsidian'ın gizli depolamasında tutulur, parola hiç saklanmaz.",
+							"Giriş yapılmadı. Giriş yap, KDM'nin giriş sayfasını açar; güvenlik doğrulaması ve giriş orada yapılır. Erişim anahtarları Obsidian'ın gizli depolamasında tutulur.",
 						render: (setting: Setting) => {
 							const loggedIn = this.plugin.sessionSummary() !== null;
 							setting
@@ -146,6 +149,20 @@ export class KdmPlannerSettingTab extends PluginSettingTab {
 									}),
 								);
 						},
+					},
+					{
+						name: "Parolayı hatırla",
+						desc:
+							"KDM giriş sayfasına yazdığınız e-posta ve parola, giriş başarılı olunca bu cihazda Obsidian'ın gizli depolamasında saklanır (kasayla eşitlenmez). " +
+							"Oturum düştüğünde giriş sayfası kendiliğinden açılır, bilgiler doldurulur ve güvenlik doğrulaması geçince giriş gönderilir. Kapatınca ya da çıkış yapınca kayıtlı parola silinir." +
+							(this.plugin.hasSavedLogin ? " Şu an bir parola kayıtlı." : settings.rememberPassword ? " Parola bir sonraki girişte kaydedilir." : ""),
+						render: (setting: Setting) =>
+							setting.addToggle((toggle) =>
+								toggle.setValue(settings.rememberPassword).onChange((value) => {
+									this.plugin.setRememberPassword(value);
+									this.update();
+								}),
+							),
 					},
 				],
 			},

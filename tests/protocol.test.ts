@@ -9,8 +9,10 @@ import {
 	mergeSetCookie,
 	normalizeBaseUrl,
 	parseRefreshResponse,
+	parseStoredLogin,
 	PlanStatus,
 	revivePlan,
+	storedLoginApplies,
 	toWireDate,
 	toWirePlan,
 } from "../src/kdm-protocol.ts";
@@ -112,4 +114,24 @@ test("mergeSetCookie replaces, adds and expires cookies", () => {
 
 test("parseRefreshResponse keeps the session cookie", () => {
 	assert.equal(parseRefreshResponse({ token: "n" }, { token: "o", refreshToken: "r", cookie: "s=1" })?.cookie, "s=1");
+});
+
+test("parseStoredLogin accepts only a complete login", () => {
+	const login = { base: "https://kdm.example.com", email: "a@b.c", password: "pw" };
+	assert.deepEqual(parseStoredLogin(JSON.stringify(login)), login);
+	assert.equal(parseStoredLogin(""), null);
+	assert.equal(parseStoredLogin(null), null);
+	assert.equal(parseStoredLogin("not json"), null);
+	assert.equal(parseStoredLogin(JSON.stringify({ ...login, password: "" })), null);
+	assert.equal(parseStoredLogin(JSON.stringify({ base: login.base, email: login.email })), null);
+});
+
+test("storedLoginApplies binds a login to its address and email", () => {
+	const login = { base: "https://kdm.example.com", email: "Ali@Example.com", password: "pw" };
+	assert.equal(storedLoginApplies(login, "https://kdm.example.com", ""), true);
+	assert.equal(storedLoginApplies(login, "https://kdm.example.com", " ali@example.com "), true);
+	assert.equal(storedLoginApplies(login, "https://kdm.example.com", "veli@example.com"), false);
+	assert.equal(storedLoginApplies(login, "https://other.example.com", ""), false);
+	assert.equal(storedLoginApplies(login, null, ""), false);
+	assert.equal(storedLoginApplies(null, "https://kdm.example.com", ""), false);
 });

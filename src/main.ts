@@ -3,7 +3,7 @@ import { KdmCalendarView, VIEW_TYPE_KDM } from "./calendar-view";
 import { isTokenExpired, tokenExpiryMs, userIdFromToken } from "./jwt";
 import { EntryViewModal } from "./entry-modal";
 import { KdmClient } from "./kdm-client";
-import { buildNewPlan, JobCatalogEntry, LoginUser, normalizeBaseUrl, PlanEntry, PlanStatus, Session } from "./kdm-protocol";
+import { buildNewPlan, JobCatalogEntry, LoginUser, normalizeBaseUrl, parseStoredLogin, PlanEntry, PlanStatus, Session, StoredLogin, storedLoginApplies } from "./kdm-protocol";
 import { confirm, pickWeek } from "./modals";
 import { registerWeekBlock } from "./note-block";
 import { RequestSigner } from "./request-signer";
@@ -11,14 +11,18 @@ import { PlanFormValue, PlanModal, PlanModalInit } from "./plan-modal";
 import { DEFAULT_SETTINGS, KdmPlannerSettings, KdmPlannerSettingTab } from "./settings";
 import { addDays, isoDate, lunchFromSettings, minEditableDate, startOfWeek, workHoursFromSettings } from "./week";
 import { emptyWeekBlock } from "./week-note";
-import { KdmLoginView, VIEW_TYPE_KDM_LOGIN, webLogin } from "./web-login";
+import { KdmLoginView, LoginCredentials, VIEW_TYPE_KDM_LOGIN, webLogin } from "./web-login";
 
 const TOKEN_SECRET = "kdm-planner-token";
 const REFRESH_SECRET = "kdm-planner-refresh-token";
 /** KDM's session cookie, which the tokens are bound to. */
 const COOKIE_SECRET = "kdm-planner-session-cookie";
-/** Where 1.3 kept a remembered password. Login now goes through KDM's web page, so it is only ever cleared. */
+/** Where 1.3 kept a remembered password, in a form that is no longer read; it is only ever cleared. */
 const LEGACY_PASSWORD_SECRET = "kdm-planner-password";
+/** "Remember password": the email and password typed into KDM's login page, with the address they belong to. */
+const LOGIN_SECRET = "kdm-planner-login";
+/** After a login started by itself was cancelled or failed, none is started again for this long (a click still logs in). */
+const AUTO_LOGIN_PAUSE_MS = 10 * 60_000;
 
 interface CatalogCache {
 	fetchedAt: number;
@@ -34,7 +38,6 @@ interface PluginData extends Partial<KdmPlannerSettings> {
 	sessionBase?: string | null;
 	/** Written by 1.3 for "remember password"; dropped on load. */
 	passwordFor?: string | null;
-	rememberPassword?: unknown;
 }
 
 /** Callbacks for whoever opened the dialog on an existing entry (e.g. a note that stands for it). */
@@ -63,7 +66,12 @@ export default class KdmPlannerPlugin extends Plugin {
 	private readonly signer = new RequestSigner();
 	private weeks = new Map<string, Promise<PlanEntry[]>>();
 	private listeners = new Set<() => void>();
-	private loginInFlight = false;
+	/** The login in progress; everything that needs one at the same time waits for this one. */
+	private loginInFlight: Promise<boolean> | null = null;
+	/** Set while a fresh session reads its profile, so a refusal there does not start another login. */
+	private startingSession = false;
+	/** No login is started by itself before this time (see AUTO_LOGIN_PAUSE_MS). */
+	private autoLoginPausedUntil = 0;
 	/** Writes the settings shortly after the last change, so typing in a field does not write the file on every key. */
 	readonly saveSoon = debounce(() => void this.saveSettings(), 600, true);
 
@@ -144,10 +152,10 @@ export default class KdmPlannerPlugin extends Plugin {
 	// ---- settings and session ----
 
 	async loadSettings(): Promise<void> {
-		// `passwordFor` and `rememberPassword` (1.3) are taken out here so they are not written back.
-		const { user, catalog, sessionBase, passwordFor, rememberPassword, ...settings } = ((await this.loadData()) as PluginData | null) ?? {};
+		// `passwordFor` (1.3) is taken out here so it is not written back.
+		const { user, catalog, sessionBase, passwordFor, ...settings } = ((await this.loadData()) as PluginData | null) ?? {};
 		this.sessionBase = typeof sessionBase === "string" ? sessionBase : null;
-		// A password remembered by 1.3 is of no use any more (KDM's login needs a check only its web page can pass).
+		// A password remembered by 1.3 is not used (it is asked to be typed into KDM's page once, and kept from there).
 		if (passwordFor !== undefined || this.app.secretStorage.getSecret(LEGACY_PASSWORD_SECRET)) {
 			this.app.secretStorage.setSecret(LEGACY_PASSWORD_SECRET, "");
 			this.saveSoon();
@@ -168,6 +176,7 @@ export default class KdmPlannerPlugin extends Plugin {
 		s.maxBlockHours = number(s.maxBlockHours, DEFAULT_SETTINGS.maxBlockHours, 1, 10);
 		s.defaultMinutes = number(s.defaultMinutes, DEFAULT_SETTINGS.defaultMinutes, 15, 240);
 		s.showWeekend = s.showWeekend !== false;
+		s.rememberPassword = s.rememberPassword === true;
 		for (const key of ["baseUrl", "email", "workStart", "workEnd", "lunchStart", "lunchEnd"] as const) if (typeof s[key] !== "string") s[key] = DEFAULT_SETTINGS[key];
 	}
 
@@ -214,6 +223,7 @@ export default class KdmPlannerPlugin extends Plugin {
 	dropForeignSession(): void {
 		if (this.stored && this.session === null) {
 			this.setSession(null, null);
+			this.forgetLogin();
 			this.resetAccount();
 			this.saveSoon();
 			this.notifyPlansChanged();
@@ -237,8 +247,9 @@ export default class KdmPlannerPlugin extends Plugin {
 		if (this.sessionBase !== previousBase) this.saveSoon();
 	}
 
+	/** Whether KDM can be used: there is a session, or one can be had again without asking (a remembered login). */
 	get loggedIn(): boolean {
-		return this.session !== null;
+		return this.session !== null || this.canLoginByItself;
 	}
 
 	createClient(): KdmClient {
@@ -249,7 +260,42 @@ export default class KdmPlannerPlugin extends Plugin {
 			getSession: () => this.session,
 			onSession: (session) => this.setSession(session, base.url),
 			signer: this.signer,
+			relogin: () => this.relogin(),
 		});
+	}
+
+	// ---- remembered login ----
+
+	/** The remembered login, but only for the address and email it was entered for. */
+	private savedLogin(): StoredLogin | null {
+		if (!this.settings.rememberPassword) return null;
+		const login = parseStoredLogin(this.app.secretStorage.getSecret(LOGIN_SECRET));
+		return storedLoginApplies(login, this.currentBase(), this.settings.email) ? login : null;
+	}
+
+	get hasSavedLogin(): boolean {
+		return this.savedLogin() !== null;
+	}
+
+	/** Whether a login may be started without the user asking for it now. */
+	private get canLoginByItself(): boolean {
+		return Date.now() >= this.autoLoginPausedUntil && this.hasSavedLogin;
+	}
+
+	private storeLogin(credentials: LoginCredentials, base: string): void {
+		const login: StoredLogin = { base, email: credentials.email, password: credentials.password };
+		this.app.secretStorage.setSecret(LOGIN_SECRET, JSON.stringify(login));
+	}
+
+	forgetLogin(): void {
+		if (this.app.secretStorage.getSecret(LOGIN_SECRET)) this.app.secretStorage.setSecret(LOGIN_SECRET, "");
+	}
+
+	/** Turns "remember password" on or off; off deletes the remembered login at once. */
+	setRememberPassword(value: boolean): void {
+		this.settings.rememberPassword = value;
+		if (!value) this.forgetLogin();
+		this.saveSoon();
 	}
 
 
@@ -269,36 +315,77 @@ export default class KdmPlannerPlugin extends Plugin {
 	 * pass: that page opens in a tab inside Obsidian and the tokens and session cookie are taken from it (the reason the
 	 * plugin is desktop only). Resolves to whether there is a session afterwards.
 	 */
-	async login(): Promise<boolean> {
-		if (this.loginInFlight) return false;
+	login(): Promise<boolean> {
+		// The user asked: logins started by themselves are allowed again.
+		this.autoLoginPausedUntil = 0;
+		return this.runLogin(false);
+	}
+
+	/**
+	 * Logs in again by itself when the session is gone (the refresh token ran out too), with the remembered login: the
+	 * login tab opens, is filled in and sent, and closes. Does nothing without a remembered login, and for a while after
+	 * such a login was cancelled or failed, so a tab does not keep popping up. Resolves to whether there is a session.
+	 */
+	async relogin(): Promise<boolean> {
+		// A refusal while a fresh session reads its profile is not a reason for another login.
+		if (this.startingSession) return false;
+		if (this.loginInFlight) return this.loginInFlight;
+		if (!this.canLoginByItself) return false;
+		const ok = await this.runLogin(true);
+		if (!ok) {
+			this.autoLoginPausedUntil = Date.now() + AUTO_LOGIN_PAUSE_MS;
+			// The views fall back to their logged-out state, with a button to log in.
+			this.notifyPlansChanged();
+		}
+		return ok;
+	}
+
+	/** Calls at the same time share one login. */
+	private runLogin(auto: boolean): Promise<boolean> {
+		this.loginInFlight ??= this.doLogin(auto).finally(() => {
+			this.loginInFlight = null;
+		});
+		return this.loginInFlight;
+	}
+
+	private async doLogin(auto: boolean): Promise<boolean> {
 		const base = normalizeBaseUrl(this.settings.baseUrl);
 		if (base.error !== undefined) {
 			new Notice(base.error);
 			return false;
 		}
-		this.loginInFlight = true;
-		try {
-			const session = await webLogin(this.app, base.url, this.settings.email);
-			if (!session) return false;
-			await this.startSession(session, base.url);
-			return true;
-		} finally {
-			this.loginInFlight = false;
-		}
+		const saved = this.savedLogin();
+		if (auto) new Notice("KDM oturumu doldu; kayıtlı bilgilerinizle yeniden giriş yapılıyor…");
+		const result = await webLogin(this.app, base.url, {
+			email: this.settings.email,
+			saved: saved && { email: saved.email, password: saved.password },
+			remember: this.settings.rememberPassword,
+			onRememberChange: (value) => this.setRememberPassword(value),
+		});
+		if (!result) return false;
+		// Only a login KDM accepted is remembered; a password changed on KDM's page replaces the old one.
+		if (this.settings.rememberPassword && result.credentials) this.storeLogin(result.credentials, base.url);
+		await this.startSession(result.session, base.url);
+		return true;
 	}
 
 	/** Stores a new session, reads the profile and the task list that go with it, and tells the views. */
 	private async startSession(session: Session, base: string): Promise<void> {
 		this.setSession(session, base);
 		this.resetAccount();
-		// The task list rarely changes, so it is fetched once per login and cached. It needs only the user number, which
-		// the token carries, so it is fetched alongside the profile.
-		const catalog = this.refreshCatalog(true).catch((e: unknown) => new Notice(`Görev listesi alınamadı: ${errorMessage(e)}`));
-		// The name is only for display, so a profile that cannot be read is not an error.
-		this.user = minimalUser(await this.createClient().getLoginUser().catch(() => null));
-		await this.saveSettings();
-		new Notice(`KDM'ye giriş yapıldı${this.user ? `: ${this.user.name} ${this.user.surname}` : ""}.`);
-		await catalog;
+		this.startingSession = true;
+		try {
+			// The task list rarely changes, so it is fetched once per login and cached. It needs only the user number, which
+			// the token carries, so it is fetched alongside the profile.
+			const catalog = this.refreshCatalog(true).catch((e: unknown) => new Notice(`Görev listesi alınamadı: ${errorMessage(e)}`));
+			// The name is only for display, so a profile that cannot be read is not an error.
+			this.user = minimalUser(await this.createClient().getLoginUser().catch(() => null));
+			await this.saveSettings();
+			new Notice(`KDM'ye giriş yapıldı${this.user ? `: ${this.user.name} ${this.user.surname}` : ""}.`);
+			await catalog;
+		} finally {
+			this.startingSession = false;
+		}
 		this.notifyPlansChanged();
 	}
 
@@ -320,6 +407,8 @@ export default class KdmPlannerPlugin extends Plugin {
 			}
 		}
 		this.setSession(null);
+		// Logging out must stay logged out: a remembered login would sign in again the next time KDM is needed.
+		this.forgetLogin();
 		this.resetAccount();
 		void this.saveSettings();
 		this.notifyPlansChanged();
@@ -332,7 +421,7 @@ export default class KdmPlannerPlugin extends Plugin {
 
 	/** Reads the user's plan entries of the current month, which proves the token works. */
 	async testConnection(): Promise<void> {
-		if (!this.session) throw new Error("Önce KDM'ye giriş yapın.");
+		if (!this.loggedIn) throw new Error("Önce KDM'ye giriş yapın.");
 		if (!this.userId) throw new Error("Kullanıcı numarası bilinmiyor. Yeniden giriş yapın.");
 		const entries = await this.getWeekEntries(startOfWeek(new Date()), true);
 		new Notice(`KDM bağlantısı çalışıyor: bu hafta ${entries.length} kayıt.`);

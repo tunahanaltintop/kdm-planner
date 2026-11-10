@@ -38,6 +38,35 @@ export interface Session {
 	cookie: string;
 }
 
+/** What "remember password" keeps in the secret storage: the account, and the KDM address it may be typed into. */
+export interface StoredLogin {
+	base: string;
+	email: string;
+	password: string;
+}
+
+/** Reads a stored login; anything incomplete or malformed counts as none. */
+export function parseStoredLogin(raw: string | null | undefined): StoredLogin | null {
+	if (!raw) return null;
+	try {
+		const value = JSON.parse(raw) as Partial<Record<keyof StoredLogin, unknown>>;
+		if (typeof value.base !== "string" || typeof value.email !== "string" || typeof value.password !== "string") return null;
+		if (!value.base || !value.email || !value.password) return null;
+		return { base: value.base, email: value.email, password: value.password };
+	} catch {
+		return null;
+	}
+}
+
+/**
+ * Whether a stored login may be used: only on the address it was entered for, and only for the configured email when
+ * one is set (a changed email means another account).
+ */
+export function storedLoginApplies(login: StoredLogin | null, base: string | null, email: string): login is StoredLogin {
+	if (!login || !base || login.base !== base) return false;
+	return !email.trim() || email.trim().toLowerCase() === login.email.toLowerCase();
+}
+
 /**
  * Applies the `Set-Cookie` header(s) of a response to a `Cookie` header: new values replace old ones, and cookies that
  * are expired (`Max-Age=0` or a past `Expires`) are dropped. Several cookies in one header may be comma-joined.

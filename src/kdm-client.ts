@@ -25,6 +25,11 @@ export interface KdmClientOptions {
 	onSession: (session: Session | null) => void;
 	/** Signs authenticated requests; shared so the signing key is fetched once per access token. */
 	signer: RequestSigner;
+	/**
+	 * Logs in again when there is no usable session any more (the refresh token ran out too). Resolves to whether there
+	 * is a session afterwards. Left out, such a request fails with "not logged in".
+	 */
+	relogin?: () => Promise<boolean>;
 }
 
 /** What one call to KDM needs besides its method and path. */
@@ -131,6 +136,15 @@ export class KdmClient {
 		return false;
 	}
 
+	private async relogin(): Promise<boolean> {
+		if (!this.options.relogin) return false;
+		try {
+			return await this.options.relogin();
+		} catch {
+			return false;
+		}
+	}
+
 	/** Renews an expired access token before it is used. Resolves to whether there is a session. */
 	private async ensureSession(): Promise<boolean> {
 		const session = this.options.getSession();
@@ -144,9 +158,11 @@ export class KdmClient {
 			if (!session) throw new KdmError("Not logged in to KDM.", 401);
 			return this.exchange(method, path, { token: session.token, cookie: session.cookie, body });
 		};
-		if (!(await this.ensureSession())) throw new KdmError("Not logged in to KDM.", 401);
+		if (!(await this.ensureSession()) && !(await this.relogin())) throw new KdmError("Not logged in to KDM.", 401);
 		let response = await send();
 		if (response.status === 401 && (await this.refresh())) response = await send();
+		// Refused even after a refresh (or the refresh was refused): a new login is the only way left.
+		if (response.status === 401 && (await this.relogin())) response = await send();
 		if (response.status === 401) throw new KdmError("The KDM session has expired. Log in again.", 401);
 		if (response.status >= 400) {
 			throw new KdmError(errorMessageOf(safeJson(response)) ?? `KDM request failed (HTTP ${response.status}).`, response.status);
