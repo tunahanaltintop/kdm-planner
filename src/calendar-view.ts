@@ -249,7 +249,7 @@ export class KdmCalendarView extends ItemView {
 		block.createDiv({ cls: "kdm-entry-title", text: title });
 		block.createDiv({ cls: "kdm-entry-time", text: `${clock(new Date(entry.startTime))} – ${clock(new Date(entry.endTime))}` });
 		if (entry.description) block.createDiv({ cls: "kdm-entry-desc", text: entry.description });
-		block.title = [title, `${style.label} · ${formatDuration((new Date(entry.endTime).getTime() - new Date(entry.startTime).getTime()) / 60_000)}`, entry.description ?? "", locked ? "Kilitli (geçmiş hafta): görüntülemek için tıklayın" : ""]
+		block.title = [title, `${style.label} · ${formatDuration(entry.statusId === "DayOff" && entry.hour ? entry.hour * 60 : (new Date(entry.endTime).getTime() - new Date(entry.startTime).getTime()) / 60_000)}`, entry.description ?? "", locked ? "Kilitli (geçmiş hafta): görüntülemek için tıklayın" : ""]
 			.filter(Boolean)
 			.join("\n");
 		const handle = movable ? block.createDiv({ cls: "kdm-resize" }) : null;

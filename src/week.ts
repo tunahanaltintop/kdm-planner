@@ -76,11 +76,10 @@ export function gridRange(work: WorkHours, entries: PlanEntry[], days: Date[]): 
 		const dayStart = startOfDay(day);
 		const dayEnd = addDays(dayStart, 1);
 		for (const entry of entries) {
-			const start = asDate(entry.startTime);
-			const end = asDate(entry.endTime);
-			if (!(start < dayEnd && dayStart < end)) continue;
-			from = Math.min(from, start < dayStart ? 0 : start.getHours() * 60 + start.getMinutes());
-			to = Math.max(to, end >= dayEnd ? 24 * 60 : end.getHours() * 60 + end.getMinutes());
+			const part = partOnDay(entry, day);
+			if (!part) continue;
+			from = Math.min(from, (part.start.getTime() - dayStart.getTime()) / 60_000);
+			to = Math.max(to, part.end >= dayEnd ? 24 * 60 : part.end.getHours() * 60 + part.end.getMinutes());
 		}
 	}
 	return { startHour: Math.floor(from / 60), endHour: Math.min(24, Math.ceil(to / 60)) };
@@ -226,14 +225,35 @@ export interface Segment {
 
 const asDate = (value: Date | string): Date => (value instanceof Date ? value : new Date(value));
 
-/** The part of an entry that falls on `day`, clipped to the visible hours. Null when it does not touch the day. */
-export function segmentForDay(entry: PlanEntry, day: Date, range: GridRange = { startHour: 0, endHour: 24 }): Segment | null {
-	const dayStart = new Date(day.getFullYear(), day.getMonth(), day.getDate(), range.startHour);
-	const dayEnd = new Date(day.getFullYear(), day.getMonth(), day.getDate(), range.endHour);
+/**
+ * The part of an entry that lies on `day`, or null. A leave over several days is a leave of its daily hours on each
+ * day (`08:30` on Monday to `17:30` on Friday is 08:30-17:30 every day, as KDM counts it), and the weekends inside it
+ * are free. Any other entry simply covers the day from its start to its end.
+ */
+export function partOnDay(entry: PlanEntry, day: Date): { start: Date; end: Date } | null {
+	const dayStart = startOfDay(day);
+	const dayEnd = addDays(dayStart, 1);
 	const start = asDate(entry.startTime);
 	const end = asDate(entry.endTime);
-	const from = start > dayStart ? start : dayStart;
-	const to = end < dayEnd ? end : dayEnd;
+	if (!(start < dayEnd && dayStart < end)) return null;
+	if (entry.statusId === PlanStatus.DayOff && !sameDay(start, end)) {
+		const inside = !sameDay(day, start) && !sameDay(day, end);
+		if (inside && (day.getDay() === 0 || day.getDay() === 6)) return null;
+		const from = new Date(day.getFullYear(), day.getMonth(), day.getDate(), start.getHours(), start.getMinutes());
+		const to = new Date(day.getFullYear(), day.getMonth(), day.getDate(), end.getHours(), end.getMinutes());
+		if (to > from) return { start: from, end: to };
+	}
+	return { start: start > dayStart ? start : dayStart, end: end < dayEnd ? end : dayEnd };
+}
+
+/** The part of an entry that falls on `day`, clipped to the visible hours. Null when it does not touch the day. */
+export function segmentForDay(entry: PlanEntry, day: Date, range: GridRange = { startHour: 0, endHour: 24 }): Segment | null {
+	const part = partOnDay(entry, day);
+	if (!part) return null;
+	const dayStart = new Date(day.getFullYear(), day.getMonth(), day.getDate(), range.startHour);
+	const dayEnd = new Date(day.getFullYear(), day.getMonth(), day.getDate(), range.endHour);
+	const from = part.start > dayStart ? part.start : dayStart;
+	const to = part.end < dayEnd ? part.end : dayEnd;
 	return to > from ? { entry, start: from, end: to } : null;
 }
 

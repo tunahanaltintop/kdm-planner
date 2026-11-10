@@ -83,11 +83,24 @@ test("suggestSlot starts the day at the working hours (08:30 by default) and lea
 	assert.equal(suggestSlot(day, [entry(1, 27, 8, 0, 17, 30)], 60, 15), null);
 });
 
-test("segmentForDay clips multi-day entries to visible hours", () => {
+test("segmentForDay shows a leave over several days with its daily hours on each day", () => {
 	const leave: PlanEntry = { userId: 1, statusId: PlanStatus.DayOff, startTime: at(12, 8, 30), endTime: at(16, 17, 30) };
-	const wednesday = segmentForDay(leave, at(14, 0), { startHour: 8, endHour: 18 });
-	assert.deepEqual([wednesday?.start, wednesday?.end], [at(14, 8), at(14, 18)]);
+	for (const day of [12, 14, 16]) {
+		const segment = segmentForDay(leave, at(day, 0), { startHour: 8, endHour: 18 });
+		assert.deepEqual([segment?.start, segment?.end], [at(day, 8, 30), at(day, 17, 30)]);
+	}
 	assert.equal(segmentForDay(leave, at(17, 0), { startHour: 8, endHour: 18 }), null);
+	// Friday to Monday: the weekend in between stays free.
+	const overWeekend: PlanEntry = { userId: 1, statusId: PlanStatus.DayOff, startTime: at(16, 8, 30), endTime: at(19, 17, 30) };
+	assert.equal(segmentForDay(overWeekend, at(17, 0)), null);
+	assert.equal(segmentForDay(overWeekend, at(18, 0)), null);
+	assert.deepEqual(segmentForDay(overWeekend, at(19, 0))?.start, at(19, 8, 30));
+});
+
+test("segmentForDay clips other multi-day entries to visible hours", () => {
+	const task: PlanEntry = { userId: 1, statusId: PlanStatus.Planned, startTime: at(12, 16, 0), endTime: at(13, 10, 0) };
+	const first = segmentForDay(task, at(12, 0), { startHour: 8, endHour: 18 });
+	assert.deepEqual([first?.start, first?.end], [at(12, 16), at(12, 18)]);
 });
 
 test("gridRange covers the working hours and widens for entries outside them", () => {
@@ -98,6 +111,9 @@ test("gridRange covers the working hours and widens for entries outside them", (
 	assert.deepEqual(gridRange(work, [entry(1, 27, 7, 15, 9, 0), entry(2, 27, 17, 0, 19, 30)], days), { startHour: 7, endHour: 20 });
 	assert.deepEqual(gridRange(work, [entry(1, 28, 6, 0, 7, 0)], days), { startHour: 8, endHour: 18 });
 	assert.deepEqual(workHoursFromSettings("18:00", "09:00"), work);
+	// A leave over several days keeps its daily hours, so it does not stretch the grid to the whole day.
+	const leave: PlanEntry = { userId: 1, statusId: PlanStatus.DayOff, startTime: at(26, 8, 30), endTime: at(30, 17, 30) };
+	assert.deepEqual(gridRange(work, [leave], [at(26, 0), at(27, 0), at(30, 0)]), { startHour: 8, endHour: 18 });
 });
 
 test("layoutSegments puts overlapping entries in separate columns", () => {
